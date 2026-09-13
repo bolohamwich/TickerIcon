@@ -43,7 +43,7 @@ Right-click the tray icon to open the context menu:
 
 The **Settings** window lets you update:
 
-* the list of tracked ticker symbols
+* the list of tracked ticker symbols (up to ten symbols)
 * positive, negative, error-border, and market-state colors
 * scroll speed
 * how long each price stays visible
