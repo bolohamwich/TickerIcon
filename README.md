@@ -1,5 +1,9 @@
 # TickerIcon
 
+[![Tests](https://github.com/bolohamwich/TickerIcon/actions/workflows/tests.yml/badge.svg)](https://github.com/bolohamwich/TickerIcon/actions/workflows/tests.yml)
+[![Latest Release](https://img.shields.io/github/v/release/bolohamwich/TickerIcon)](https://github.com/bolohamwich/TickerIcon/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/bolohamwich/TickerIcon)](LICENSE)
+
 A lightweight, open-source Python application that embeds a live, automatically updating stock ticker directly into Windows system tray. 
 Relies on Yahoo Finance for 1-minute updates during regular, pre-market, and after-hours trading sessions.
 
