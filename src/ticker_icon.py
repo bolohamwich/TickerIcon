@@ -47,6 +47,7 @@ class TickerIcon:
 
         self.running = False
         self.tray_icon = None
+        self.paused = threading.Event()
         self.update_checker = UpdateChecker()
         self.update_lock = threading.Lock()
         self.update_in_progress = False
@@ -62,13 +63,14 @@ class TickerIcon:
         )
         menu = pystray.Menu(
             pystray.MenuItem('Settings', self.on_settings),
+            pystray.MenuItem('Pause', self.on_toggle_pause, checked=lambda item: self.paused.is_set()),
             self.update_menu_item,
             pystray.MenuItem('Quit', self.on_quit),
         )
 
         # Generate initial placeholder icon
         first_symbol = self.config['tickers'][0]
-        initial_image = self.icon_gen.generate_loading_frame()
+        initial_image = self.icon_gen.generate_app_icon()
         self.tray_icon = pystray.Icon(
             "stock_ticker",
             initial_image,
@@ -110,6 +112,22 @@ class TickerIcon:
             window.show()
         except RuntimeError as exc:
             self._notify(str(exc))
+
+    def on_toggle_pause(self, icon, menu_item):
+        """
+        Callback for the Pause menu checkbox. Freezes the fetch/display loops
+        and shows the static application icon while paused.
+
+        Args:
+            icon (pystray.Icon): The tray icon instance.
+            menu_item (pystray.MenuItem): The menu item that was clicked.
+        """
+        if self.paused.is_set():
+            self.paused.clear()
+        else:
+            self.paused.set()
+            icon.icon = self.icon_gen.generate_app_icon()
+            icon.title = "TickerIcon (Paused)"
 
     def _apply_config(self, config):
         """Reloads the in-memory runtime state after a config save.
@@ -173,6 +191,10 @@ class TickerIcon:
     def _fetch_loop(self):
         """Background loop that periodically refreshes market data for all tickers."""
         while self.running:
+            if self.paused.is_set():
+                self._interruptible_sleep(0.25)
+                continue
+
             with self.lock:
                 api = self.api
                 config_version = self.config
@@ -208,6 +230,12 @@ class TickerIcon:
             self.data_ready.wait(timeout=0.1)
 
         while self.running:
+            if self.paused.is_set():
+                self.tray_icon.icon = self.icon_gen.generate_app_icon()
+                self.tray_icon.title = "TickerIcon (Paused)"
+                self._wait_while_paused()
+                continue
+
             with self.lock:
                 symbols = list(self.config['tickers'])
                 display_seconds = self.config['display_seconds']
@@ -220,6 +248,8 @@ class TickerIcon:
             for symbol in itertools.cycle(symbols):
                 if not self.running:
                     return
+                if self.paused.is_set():
+                    break
 
                 with self.lock:
                     current_symbols = list(self.config['tickers'])
@@ -265,7 +295,7 @@ class TickerIcon:
         steps = max(int(duration_s / SCROLL_FRAME_INTERVAL_S), 1)
 
         for step in range(steps + 1):
-            if not self.running:
+            if not self.running or self.paused.is_set():
                 return
             offset = int(distance * step / steps)
             self.tray_icon.icon = self.icon_gen.generate_scroll_frame(symbol, state, offset)
@@ -301,5 +331,10 @@ class TickerIcon:
             seconds (float): Total time to sleep for, in seconds.
         """
         end_time = time.monotonic() + seconds
-        while self.running and time.monotonic() < end_time:
+        while self.running and not self.paused.is_set() and time.monotonic() < end_time:
+            time.sleep(0.1)
+
+    def _wait_while_paused(self):
+        """Blocks until the app is unpaused or shutting down."""
+        while self.running and self.paused.is_set():
             time.sleep(0.1)

@@ -10,7 +10,7 @@ a = Analysis(
     ['main.pyw'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('assets/tickericon.ico', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
