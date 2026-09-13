@@ -9,6 +9,7 @@ import pystray
 from src.market_api import MarketAPI, StockData
 from src.icon_generator import IconGenerator
 from src.config_handler import ConfigHandler
+from src.config_window import ConfigWindow
 from src.updater import UpdateChecker
 
 # Animation frame rate for the ticker symbol scroll (higher = smoother, more CPU)
@@ -27,6 +28,7 @@ class TickerIcon:
         Args:
             config_path (str): Path to the config.cfg file to load.
         """
+        self.config_path = config_path
         self.config = ConfigHandler(config_path).load()
         self.api = MarketAPI(self.config['tickers'])
         self.icon_gen = IconGenerator(self.config)
@@ -58,6 +60,7 @@ class TickerIcon:
             'Check for Updates', self.on_check_for_updates
         )
         menu = pystray.Menu(
+            pystray.MenuItem('Settings', self.on_settings),
             self.update_menu_item,
             pystray.MenuItem('Quit', self.on_quit),
         )
@@ -89,6 +92,28 @@ class TickerIcon:
         """
         self.running = False
         icon.stop()
+
+    def on_settings(self, icon, menu_item):
+        """Opens the configuration window so the user can edit config.cfg."""
+        try:
+            window = ConfigWindow(self.config_path, self.config, on_save=self._apply_config)
+        except RuntimeError as exc:
+            self._notify(str(exc))
+            return
+
+        threading.Thread(target=window.show, daemon=True).start()
+
+    def _apply_config(self, config):
+        """Reloads the in-memory runtime state after a config save."""
+        self.config = config
+        self.api = MarketAPI(self.config['tickers'])
+        self.icon_gen = IconGenerator(self.config)
+        self.snapshot = {
+            symbol: StockData(symbol=symbol) for symbol in self.config['tickers']
+        }
+        self.data_ready.clear()
+        if self.tray_icon is not None:
+            self.tray_icon.notify("Settings saved. TickerIcon will use the new configuration.", "TickerIcon")
 
     def on_check_for_updates(self, icon, menu_item):
         """Checks for updates in the background so the tray menu stays responsive."""
