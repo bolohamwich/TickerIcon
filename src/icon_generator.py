@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from src.config_handler import AppConfig
+from src.config_handler import DEFAULT_FONT_SIZE, AppConfig
 
 
 class IconGenerator:
@@ -47,8 +47,9 @@ class IconGenerator:
         self.color_error_border = config['color_error_border']
 
         # Pre-load font to optimize rendering loop
+        font_size = config.get('font_size', DEFAULT_FONT_SIZE)
         try:
-            self.font = ImageFont.truetype("arialbd.ttf", 36)
+            self.font = ImageFont.truetype("arialbd.ttf", font_size)
         except IOError:
             self.font = ImageFont.load_default()
 

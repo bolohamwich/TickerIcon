@@ -14,6 +14,7 @@ COLOR_CLOSED=#323232
 SCROLL_SPEED_MS=500
 DISPLAY_SECONDS=8
 CONTINUOUS_SCROLL=true
+FONT_SIZE=36
 """
 
 
@@ -39,6 +40,7 @@ def test_load_parses_tickers_and_colors(config_file):
     assert config["scroll_speed_ms"] == 500
     assert config["display_seconds"] == 8.0
     assert config["continuous_scroll"] is True
+    assert config["font_size"] == 36
 
 
 def test_load_defaults_continuous_scroll_to_true_when_missing(tmp_path):
@@ -76,6 +78,35 @@ def test_load_rejects_non_positive_display_seconds(tmp_path):
     path.write_text(content)
 
     with pytest.raises(ValueError, match="DISPLAY_SECONDS"):
+        ConfigHandler(str(path)).load()
+
+
+def test_load_defaults_font_size_when_missing(tmp_path):
+    content = CONFIG_CONTENT.replace("FONT_SIZE=36\n", "")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["font_size"] == 36
+
+
+def test_load_parses_custom_font_size(tmp_path):
+    content = CONFIG_CONTENT.replace("FONT_SIZE=36", "FONT_SIZE=44")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["font_size"] == 44
+
+
+def test_load_rejects_non_positive_font_size(tmp_path):
+    content = CONFIG_CONTENT.replace("FONT_SIZE=36", "FONT_SIZE=0")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    with pytest.raises(ValueError, match="FONT_SIZE"):
         ConfigHandler(str(path)).load()
 
 
@@ -125,6 +156,7 @@ def test_save_round_trips_config(tmp_path):
         "scroll_speed_ms": 250,
         "display_seconds": 5.5,
         "continuous_scroll": True,
+        "font_size": 40,
     }
 
     ConfigHandler(str(path)).save(original)
