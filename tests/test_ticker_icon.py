@@ -70,6 +70,67 @@ class TestTogglePause:
         assert app.paused.is_set() is False
 
 
+class TestOnSettings:
+    def test_runs_window_on_a_daemon_thread(self, app):
+        worker = MagicMock()
+
+        with patch("src.ticker_icon.threading.Thread", return_value=worker) as thread:
+            app.on_settings(app.tray_icon, MagicMock())
+
+        thread.assert_called_once_with(target=app._run_settings_window, daemon=True)
+        worker.start.assert_called_once()
+        assert app.settings_open is True
+
+    def test_does_not_open_a_second_window_while_one_is_open(self, app):
+        worker = MagicMock()
+
+        with patch("src.ticker_icon.threading.Thread", return_value=worker) as thread:
+            app.on_settings(app.tray_icon, MagicMock())
+            app.on_settings(app.tray_icon, MagicMock())
+
+        thread.assert_called_once()
+
+    def test_run_settings_window_releases_guard_on_close(self, app):
+        app.settings_open = True
+
+        with patch("src.ticker_icon.ConfigWindow") as window_cls:
+            app._run_settings_window()
+
+        window_cls.return_value.show.assert_called_once()
+        assert app.settings_open is False
+
+    def test_run_settings_window_notifies_and_releases_guard_on_error(self, app):
+        app.settings_open = True
+
+        with patch("src.ticker_icon.ConfigWindow", side_effect=RuntimeError("no tk")):
+            app._run_settings_window()
+
+        app.tray_icon.notify.assert_called_once_with("no tk", "TickerIcon")
+        assert app.settings_open is False
+
+
+class TestApplyConfig:
+    def test_preserves_fetched_data_for_retained_tickers(self, app):
+        fetched = StockData(symbol="AMD", price=123.0, change_pct=4.5, state="open")
+        app.snapshot["AMD"] = fetched
+        app.data_ready.set()
+
+        app._apply_config(dict(app.config))
+
+        assert app.snapshot["AMD"] is fetched
+        assert app.data_ready.is_set() is True
+
+    def test_clears_data_ready_when_a_new_ticker_is_added(self, app):
+        app.data_ready.set()
+        new_config = dict(app.config)
+        new_config["tickers"] = ["AMD", "AAPL", "NVDA"]
+
+        app._apply_config(new_config)
+
+        assert app.data_ready.is_set() is False
+        assert set(app.snapshot.keys()) == {"AMD", "AAPL", "NVDA"}
+
+
 def test_on_check_for_updates_starts_only_one_worker(app):
     menu_item = MagicMock()
     worker = MagicMock()
@@ -221,7 +282,7 @@ class TestFetchLoop:
         app.api.fetch_all = fake_fetch_all
         app.running = True
 
-        with patch.object(app, "_interruptible_sleep") as mock_sleep:
+        with patch.object(app, "_sleep_between_fetches") as mock_sleep:
             app._fetch_loop()
 
         mock_sleep.assert_called_once()
@@ -240,7 +301,7 @@ class TestFetchLoop:
         app.api.fetch_all = fake_fetch_all
         app.running = True
 
-        with patch.object(app, "_interruptible_sleep") as mock_sleep:
+        with patch.object(app, "_sleep_between_fetches") as mock_sleep:
             app._fetch_loop()
 
         mock_sleep.assert_called_once_with(60)
@@ -288,6 +349,21 @@ class TestDisplayLoop:
 
         app._scroll_symbol.assert_not_called()
 
+    def test_shows_app_icon_and_loading_title_while_data_not_ready(self, app):
+        app._scroll_symbol = MagicMock()
+        app.running = True
+
+        def flip_after_delay():
+            time.sleep(0.05)
+            app.running = False
+
+        threading.Thread(target=flip_after_delay, daemon=True).start()
+
+        app._display_loop()
+
+        assert app.tray_icon.icon is not None
+        assert app.tray_icon.title == "TickerIcon (Loading...)"
+
     def test_shows_app_icon_and_skips_ticker_cycle_when_paused(self, app):
         app._scroll_symbol = MagicMock()
         app._show_value = MagicMock()
@@ -320,6 +396,17 @@ class TestFetchLoopPause:
             app._fetch_loop()
 
         app.api.fetch_all.assert_not_called()
+
+
+class TestSleepBetweenFetches:
+    def test_returns_immediately_when_data_ready_cleared(self, app):
+        app.running = True
+        app.data_ready.clear()
+
+        start = time.monotonic()
+        app._sleep_between_fetches(5)
+
+        assert time.monotonic() - start < 1
 
 
 class TestDisplayContinuousLap:

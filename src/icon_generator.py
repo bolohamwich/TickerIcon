@@ -15,12 +15,16 @@ class IconGenerator:
     @staticmethod
     def _resolve_app_icon_path() -> Path:
         """
-        Locates assets/tickericon.ico next to the executable (frozen) or the project root (dev).
+        Locates assets/tickericon.ico in the PyInstaller bundle (frozen) or the project root (dev).
 
         Returns:
             Path: The resolved filesystem path to the application icon file.
         """
-        base_dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent.parent
+        if getattr(sys, 'frozen', False):
+            # PyInstaller 6+ onedir places bundled data under _internal (sys._MEIPASS)
+            base_dir = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent))
+        else:
+            base_dir = Path(__file__).parent.parent
         return base_dir / "assets" / "tickericon.ico"
 
     def __init__(self, config: AppConfig):
