@@ -1,105 +1,188 @@
-import yfinance as yf
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
-from typing import Tuple
+
+import yfinance as yf
+
+# Maps Yahoo Finance exchange codes to human-friendly names for the tooltip.
+# Falls back to the metadata's own "fullExchangeName" when a code is unknown.
+_EXCHANGE_NAMES = {
+    'NMS': 'Nasdaq',
+    'NYQ': 'NYSE',
+    'ASE': 'NYSE American',
+    'PCX': 'NYSE Arca',
+    'LSE': 'London',
+    'TOR': 'Toronto',
+    'GER': 'Frankfurt',
+    'PAR': 'Paris',
+    'AMS': 'Amsterdam',
+    'HKG': 'Hong Kong',
+    'TYO': 'Tokyo',
+    'SHH': 'Shanghai',
+    'SHZ': 'Shenzhen',
+    'NSI': 'NSE India',
+    'BSE': 'BSE India',
+    'ASX': 'Sydney',
+}
+
+
+@dataclass
+class StockData:
+    """Latest known snapshot of a single tracked ticker."""
+
+    symbol: str
+    price: float = 0.0
+    change_pct: float = 0.0
+    day_high: float = 0.0
+    day_low: float = 0.0
+    state: str = 'closed'
+    exchange: str = ''
+    next_open: Optional[datetime] = None
+    has_error: bool = False
 
 
 class MarketAPI:
     """
-    Handles interactions with Yahoo Finance and determines market states
-    based on New York time.
+    Fetches quote data for one or more tickers from Yahoo Finance and
+    resolves each ticker's own market session state from its exchange's
+    trading hours, so symbols from different markets/timezones are all
+    handled correctly.
     """
 
-    def __init__(self, ticker_symbol: str):
-        self.ticker_symbol = ticker_symbol
-        self.tz = ZoneInfo("America/New_York")
-
-    def get_market_state(self, ny_time: datetime) -> str:
+    def __init__(self, ticker_symbols: List[str]):
         """
-        Determines the current market state.
-        
         Args:
-            ny_time (datetime): Current time in New York.
-            
+            ticker_symbols (List[str]): The ticker symbols to track.
+        """
+        self.ticker_symbols = ticker_symbols
+
+    def fetch_all(self) -> Dict[str, StockData]:
+        """
+        Fetches the latest snapshot for every tracked ticker.
+
+        Note: yfinance has no batch quote endpoint, so this issues one
+        request per ticker (sequentially, to avoid hammering Yahoo Finance).
+
         Returns:
-            str: One of 'open', 'premarket', 'after_hours', or 'closed'.
+            Dict[str, StockData]: Latest data keyed by ticker symbol.
         """
-        if ny_time.weekday() >= 5:  # Saturday or Sunday
-            return 'closed'
+        return {symbol: self._fetch_one(symbol) for symbol in self.ticker_symbols}
 
-        time_float = ny_time.hour + (ny_time.minute / 60.0)
-
-        if time_float < 4.0:
-            return 'closed'
-        elif time_float < 9.5:   # 9:30 AM
-            return 'premarket'
-        elif time_float < 16.0:  # 4:00 PM
-            return 'open'
-        elif time_float < 20.0:  # 8:00 PM
-            return 'after_hours'
-        else:
-            return 'closed'
-
-    def get_next_open_time(self, ny_time: datetime) -> datetime:
+    def _fetch_one(self, symbol: str) -> StockData:
         """
-        Calculates the next 4:00 AM ET weekday session for sleep optimization.
-        
+        Fetches and parses quote and session data for a single ticker.
+
         Args:
-            ny_time (datetime): Current time in New York.
-            
+            symbol (str): The ticker symbol to fetch, e.g. 'AMD'.
+
         Returns:
-            datetime: The exact datetime of the next market pre-open.
+            StockData: The parsed snapshot, with has_error set if the
+                fetch failed or returned no data.
         """
-        target_date = ny_time.date()
-
-        # If it's already past 4:00 AM, the next premarket is at least tomorrow
-        if ny_time.hour >= 4:
-            target_date += timedelta(days=1)
-
-        # Skip Saturday and Sunday
-        while target_date.weekday() >= 5:
-            target_date += timedelta(days=1)
-
-        return datetime(
-            target_date.year, 
-            target_date.month, 
-            target_date.day, 
-            4, 0, 
-            tzinfo=self.tz
-        )
-
-    def fetch_data(self) -> Tuple[bool, float, float, float, float]:
-        """
-        Fetches the latest pricing data for the ticker.
-        
-        Returns:
-            Tuple containing:
-                - has_error (bool): True if the fetch failed.
-                - current_price (float)
-                - change_pct (float)
-                - day_high (float)
-                - day_low (float)
-        """
+        data = StockData(symbol=symbol)
         try:
-            ticker = yf.Ticker(self.ticker_symbol)
+            ticker = yf.Ticker(symbol)
             todays_data = ticker.history(period='1d', prepost=True)
 
             if todays_data.empty:
-                return True, 0.0, 0.0, 0.0, 0.0
+                data.has_error = True
+                return data
 
-            current_price = todays_data['Close'].iloc[-1]
+            data.price = todays_data['Close'].iloc[-1]
             prev_close = ticker.fast_info['previous_close']
-            change_pct = ((current_price - prev_close) / prev_close) * 100
+            data.change_pct = ((data.price - prev_close) / prev_close) * 100
 
             # Attempt to fetch high/low via fast_info, fallback to history dataframe
             try:
-                day_high = ticker.fast_info['day_high']
-                day_low = ticker.fast_info['day_low']
+                data.day_high = ticker.fast_info['day_high']
+                data.day_low = ticker.fast_info['day_low']
             except Exception:
-                day_high = todays_data['High'].max()
-                day_low = todays_data['Low'].min()
+                data.day_high = todays_data['High'].max()
+                data.day_low = todays_data['Low'].min()
 
-            return False, current_price, change_pct, day_high, day_low
+            metadata = ticker.history_metadata
+            data.exchange = _EXCHANGE_NAMES.get(
+                metadata.get('exchangeName', ''),
+                metadata.get('fullExchangeName', symbol),
+            )
+            data.state = self._resolve_state(metadata)
+            data.next_open = self._resolve_next_open(metadata)
 
         except Exception:
-            return True, 0.0, 0.0, 0.0, 0.0
+            data.has_error = True
+
+        return data
+
+    @staticmethod
+    def _resolve_state(metadata: dict) -> str:
+        """
+        Determines market state from the exchange's own current trading
+        period (pre/regular/post), so it works regardless of which
+        timezone or exchange the ticker trades on.
+
+        Args:
+            metadata (dict): Ticker.history_metadata for the symbol.
+
+        Returns:
+            str: One of 'premarket', 'open', 'after_hours', or 'closed'.
+        """
+        trading_period = metadata.get('currentTradingPeriod')
+        if not trading_period:
+            return 'closed'
+
+        now = datetime.now(ZoneInfo("UTC"))
+        pre, regular, post = trading_period['pre'], trading_period['regular'], trading_period['post']
+
+        if pre['start'] <= now < pre['end']:
+            return 'premarket'
+        elif regular['start'] <= now < regular['end']:
+            return 'open'
+        elif post['start'] <= now < post['end']:
+            return 'after_hours'
+        return 'closed'
+
+    @staticmethod
+    def _resolve_next_open(metadata: dict) -> Optional[datetime]:
+        """
+        Projects the next weekday pre-market open for this exchange, using
+        its own local trading hours.
+
+        Args:
+            metadata (dict): Ticker.history_metadata for the symbol.
+
+        Returns:
+            Optional[datetime]: The next pre-market open time in UTC, or
+                None if the metadata doesn't include a trading period.
+        """
+        trading_period = metadata.get('currentTradingPeriod')
+        if not trading_period:
+            return None
+
+        candidate = trading_period['pre']['start'].to_pydatetime()
+        now = datetime.now(candidate.tzinfo)
+
+        if candidate <= now:
+            candidate += timedelta(days=1)
+
+        # Skip Saturday/Sunday; exchange-specific holidays aren't tracked
+        while candidate.weekday() >= 5:
+            candidate += timedelta(days=1)
+
+        return candidate.astimezone(ZoneInfo("UTC"))
+
+    @staticmethod
+    def get_next_open_time(snapshot: Dict[str, StockData]) -> Optional[datetime]:
+        """
+        Finds the soonest upcoming market open across a snapshot of tickers,
+        used to let the update loop sleep longer when every market is closed.
+
+        Args:
+            snapshot (Dict[str, StockData]): Latest fetched data per ticker.
+
+        Returns:
+            Optional[datetime]: The earliest next open time, or None if no
+                ticker in the snapshot has a known next open time.
+        """
+        next_opens = [d.next_open for d in snapshot.values() if d.next_open is not None]
+        return min(next_opens) if next_opens else None

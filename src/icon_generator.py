@@ -1,5 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 
+from src.config_handler import AppConfig
+
 
 class IconGenerator:
     """
@@ -7,19 +9,24 @@ class IconGenerator:
     handling color states, typography scaling, and error borders.
     """
 
-    def __init__(self):
+    def __init__(self, config: AppConfig):
+        """
+        Args:
+            config (AppConfig): Loaded app configuration with the state
+                background colors and price change text colors.
+        """
         # Background Colors (Pastel scheme + Dark mode for closed)
         self.bg_colors = {
-            'open': (224, 255, 224),         # Light green
-            'premarket': (255, 255, 224),    # Light yellow
-            'after_hours': (224, 224, 255),  # Light blue
-            'closed': (50, 50, 50)           # Dark grey
+            'open': config['bg_open'],
+            'premarket': config['bg_premarket'],
+            'after_hours': config['bg_after_hours'],
+            'closed': config['bg_closed']
         }
-        
+
         # Text Colors
-        self.color_positive = (15, 175, 80)  # Vibrant Green
-        self.color_negative = (235, 60, 60)  # Vibrant Red
-        self.color_error_border = (255, 40, 40)
+        self.color_positive = config['color_positive']
+        self.color_negative = config['color_negative']
+        self.color_error_border = config['color_error_border']
 
         # Pre-load font to optimize rendering loop
         try:
@@ -27,7 +34,7 @@ class IconGenerator:
         except IOError:
             self.font = ImageFont.load_default()
 
-    def generate(self, change_pct: float, state: str, has_error: bool = False) -> Image.Image:
+    def generate_value_frame(self, change_pct: float, state: str, has_error: bool = False) -> Image.Image:
         """
         Creates the icon image based on market state and price action.
         
@@ -67,3 +74,59 @@ class IconGenerator:
             draw.rectangle([(0, 0), (63, 63)], outline=self.color_error_border, width=2)
 
         return img
+
+    def generate_scroll_frame(self, symbol: str, state: str, offset: int) -> Image.Image:
+        """
+        Creates one frame of the right-to-left ticker symbol marquee.
+
+        Args:
+            symbol (str): The ticker symbol being scrolled, e.g. 'AMD'.
+            state (str): Current market state, used for the background color.
+            offset (int): Pixels the text has travelled from the right edge.
+
+        Returns:
+            Image.Image: A 64x64 Pillow Image ready for pystray.
+        """
+        bg_color = self.bg_colors.get(state, self.bg_colors['closed'])
+        text_color = self._contrast_text_color(bg_color)
+
+        img = Image.new('RGB', (64, 64), color=bg_color)
+        draw = ImageDraw.Draw(img)
+
+        bbox = draw.textbbox((0, 0), symbol, font=self.font)
+        text_height = bbox[3] - bbox[1]
+
+        x = 64 - offset
+        y = (64 - text_height) / 2 - 4  # Slight upward offset for visual balance
+
+        draw.text((x, y), symbol, fill=text_color, font=self.font)
+
+        return img
+
+    def measure_text_width(self, text: str) -> int:
+        """
+        Measures the pixel width `text` would occupy when rendered with the
+        icon font, used to size the ticker symbol scroll animation.
+
+        Args:
+            text (str): The text to measure.
+
+        Returns:
+            int: The width, in pixels.
+        """
+        bbox = ImageDraw.Draw(Image.new('RGB', (1, 1))).textbbox((0, 0), text, font=self.font)
+        return bbox[2] - bbox[0]
+
+    @staticmethod
+    def _contrast_text_color(bg_color: tuple) -> tuple:
+        """
+        Picks black or white text so the ticker symbol stays legible on any background.
+
+        Args:
+            bg_color (tuple): The (R, G, B) background color to contrast against.
+
+        Returns:
+            tuple: (0, 0, 0) for black or (255, 255, 255) for white text.
+        """
+        luminance = 0.299 * bg_color[0] + 0.587 * bg_color[1] + 0.114 * bg_color[2]
+        return (0, 0, 0) if luminance > 140 else (255, 255, 255)

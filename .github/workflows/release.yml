@@ -1,0 +1,35 @@
+name: Build and Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Build executable
+        run: pyinstaller tickericon.spec
+
+      - name: Stage config and zip the distribution folder
+        run: |
+          Copy-Item config.cfg dist/TickerIcon/config.cfg
+          Compress-Archive -Path dist/TickerIcon/* -DestinationPath dist/TickerIcon.zip
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/TickerIcon.zip --clobber
