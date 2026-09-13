@@ -151,6 +151,51 @@ class TestFetchOne:
         assert data.state == "open"
         assert data.next_open is not None
 
+    def test_requests_intraday_bars_with_extended_hours(self):
+        api = MarketAPI(["AMD"])
+
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame({"Close": [10.0], "High": [11.0], "Low": [9.0]})
+        mock_ticker.fast_info = {"previous_close": 10.0, "day_high": 11.0, "day_low": 9.0}
+        mock_ticker.history_metadata = {}
+
+        with patch("src.market_api.yf.Ticker", return_value=mock_ticker):
+            api._fetch_one("AMD")
+
+        mock_ticker.history.assert_called_once_with(period='1d', interval='1m', prepost=True)
+
+    def test_prefers_regular_market_previous_close_when_available(self):
+        api = MarketAPI(["AMD"])
+
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame({"Close": [102.0], "High": [103.0], "Low": [99.0]})
+        mock_ticker.fast_info = {
+            # Stale daily-bar derived value that must be ignored
+            "previous_close": 90.0,
+            "regular_market_previous_close": 100.0,
+            "day_high": 103.0,
+            "day_low": 99.0,
+        }
+        mock_ticker.history_metadata = {}
+
+        with patch("src.market_api.yf.Ticker", return_value=mock_ticker):
+            data = api._fetch_one("AMD")
+
+        assert data.change_pct == pytest.approx(2.0)
+
+    def test_falls_back_to_previous_close_when_regular_market_value_missing(self):
+        api = MarketAPI(["AMD"])
+
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame({"Close": [102.0], "High": [103.0], "Low": [99.0]})
+        mock_ticker.fast_info = {"previous_close": 100.0, "day_high": 103.0, "day_low": 99.0}
+        mock_ticker.history_metadata = {}
+
+        with patch("src.market_api.yf.Ticker", return_value=mock_ticker):
+            data = api._fetch_one("AMD")
+
+        assert data.change_pct == pytest.approx(2.0)
+
     def test_falls_back_to_history_high_low_when_fast_info_missing_them(self):
         api = MarketAPI(["AMD"])
 
