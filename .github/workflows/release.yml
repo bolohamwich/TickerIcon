@@ -23,8 +23,10 @@ jobs:
 
       - name: Set application version
         shell: powershell
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          $version = "${{ github.event.release.tag_name }}" -replace '^[vV]', ''
+          $version = $env:RELEASE_TAG -replace '^[vV]', ''
           (Get-Content src/version.py) -replace 'APP_VERSION = ".*"', ('APP_VERSION = "' + $version + '"') | Set-Content src/version.py
 
       - name: Build executable
