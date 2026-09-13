@@ -154,6 +154,8 @@ class ContinuousScrollGenerator:
         y = (ICON_SIZE - text_height) / 2 - 4  # Slight upward offset for visual balance
 
         draw.text((0, y), text, fill=text_color, font=self.icon_gen.font)
+        if data.has_error:
+            draw.rectangle([(0, 0), (img.width - 1, ICON_SIZE - 1)], outline=self.icon_gen.color_error_border, width=2)
         return img
 
     @staticmethod
