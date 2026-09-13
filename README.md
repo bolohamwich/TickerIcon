@@ -30,14 +30,33 @@ Launch TickerIcon from the Start Menu or by opening the installed application di
 
 *Note: Windows hides new tray icons in the overflow menu by default. Click the up-arrow `^` on your taskbar and drag the new stock icon down to the visible portion of your taskbar so it is always visible.*
 
-### Changing the Stock Symbols
+### Tray Icon Menu
 
+Right-click the tray icon to open the context menu:
+
+* **Settings** opens the configuration window.
+* **Pause** temporarily stops price updates and switches the tray icon to a paused state until you unpause it.
+* **Check for Updates** downloads the latest installer from GitHub Releases and starts the upgrade process for you.
+* **Quit** closes the application.
+
+### Settings
+
+The **Settings** window lets you update:
+
+* the list of tracked ticker symbols
+* positive, negative, error-border, and market-state colors
+* scroll speed
+* how long each price stays visible
+* whether all tracked symbols scroll continuously in one line
+
+After you save your changes, TickerIcon reloads the configuration automatically.
+
+### Updates
+
+Use **Check for Updates** from the tray icon menu to look for a newer release. When an update is available, TickerIcon downloads the latest `TickerIcon-Setup.exe`, launches it, and exits so you can complete the installer. Reinstalling with a newer installer upgrades the app in place and keeps your existing `config.cfg`.
 
 ## Running on Startup
-1. Press `Win + R` to open the Run dialog.
-2. Type `shell:startup` and press Enter.
-3. Right-click inside the folder, select **New > Shortcut**.
-4. Browse to your `main.pyw` file and complete the wizard.
+Choose **Start TickerIcon when I sign in to Windows** during installation if you want it to launch automatically at sign-in. If you skipped that option, run the latest installer again and enable the startup option.
 
 ## Building a Windows Package
 
