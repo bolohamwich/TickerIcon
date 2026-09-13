@@ -43,7 +43,7 @@ class TestBuild:
     def test_width_includes_icon_width_gap_per_symbol(self, generator, snapshot):
         generator.build(["AMD"], snapshot)
 
-        text_width = generator.icon_gen.measure_text_width("AMD +5.1%")
+        text_width = generator.icon_gen.measure_text_width("AMD +5.14%")
         assert generator.width == ICON_SIZE + text_width
 
     def test_width_grows_with_more_symbols(self, generator, snapshot):
@@ -57,7 +57,7 @@ class TestBuild:
     def test_falls_back_to_placeholder_data_for_missing_symbol(self, generator):
         generator.build(["MSFT"], {})
 
-        assert generator.width == ICON_SIZE + generator.icon_gen.measure_text_width("MSFT +0.0%")
+        assert generator.width == ICON_SIZE + generator.icon_gen.measure_text_width("MSFT +0.00%")
 
 
 class TestRenderFrame:
@@ -105,17 +105,17 @@ class TestSymbolAt:
 
 
 class TestFormatSegmentText:
-    def test_formats_positive_change_with_one_decimal(self):
+    def test_formats_positive_change_with_two_decimals(self):
         data = StockData(symbol="AMD", change_pct=5.14)
 
-        assert ContinuousScrollGenerator._format_segment_text("AMD", data) == "AMD +5.1%"
+        assert ContinuousScrollGenerator._format_segment_text("AMD", data) == "AMD +5.14%"
 
-    def test_formats_negative_change_with_one_decimal(self):
+    def test_formats_negative_change_with_two_decimals(self):
         data = StockData(symbol="AAPL", change_pct=-2.04)
 
-        assert ContinuousScrollGenerator._format_segment_text("AAPL", data) == "AAPL -2.0%"
+        assert ContinuousScrollGenerator._format_segment_text("AAPL", data) == "AAPL -2.04%"
 
-    def test_drops_decimal_for_double_digit_change(self):
+    def test_keeps_two_decimals_for_double_digit_change(self):
         data = StockData(symbol="NVDA", change_pct=12.34)
 
-        assert ContinuousScrollGenerator._format_segment_text("NVDA", data) == "NVDA +12%"
+        assert ContinuousScrollGenerator._format_segment_text("NVDA", data) == "NVDA +12.34%"

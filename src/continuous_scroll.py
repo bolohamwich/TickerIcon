@@ -161,7 +161,7 @@ class ContinuousScrollGenerator:
     @staticmethod
     def _format_segment_text(symbol: str, data: StockData) -> str:
         """
-        Formats one ticker's continuous-scroll label, e.g. 'AMD +5.1%'.
+        Formats one ticker's continuous-scroll label, e.g. 'AMD +5.14%'.
 
         Args:
             symbol (str): The ticker symbol, e.g. 'AMD'.
@@ -170,9 +170,4 @@ class ContinuousScrollGenerator:
         Returns:
             str: The symbol followed by its signed percentage change.
         """
-        abs_change = abs(data.change_pct)
-        if abs_change >= 9.95:
-            value_text = f"{data.change_pct:+.0f}%"
-        else:
-            value_text = f"{data.change_pct:+.1f}%"
-        return f"{symbol} {value_text}"
+        return f"{symbol} {data.change_pct:+.2f}%"
