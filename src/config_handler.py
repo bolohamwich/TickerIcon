@@ -46,7 +46,21 @@ class ConfigHandler:
             RGB: The corresponding (R, G, B) tuple.
         """
         value = value.strip().lstrip('#')
+        if len(value) != 6:
+            raise ValueError(f"Invalid hex color '{value}'. Expected #RRGGBB.")
         return int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
+
+    @staticmethod
+    def _rgb_to_hex(value: RGB) -> str:
+        """Convert an RGB tuple into a hexadecimal color string.
+
+        Args:
+            value (RGB): An (R, G, B) tuple to convert.
+
+        Returns:
+            str: A '#RRGGBB' color string.
+        """
+        return '#%02X%02X%02X' % value
 
     def load(self) -> AppConfig:
         """
@@ -79,3 +93,54 @@ class ConfigHandler:
             scroll_speed_ms=section.getint("SCROLL_SPEED_MS"),
             display_seconds=section.getfloat("DISPLAY_SECONDS"),
         )
+
+    def save(self, config: AppConfig):
+        """Persist a configuration dict to the on-disk config file.
+
+        Args:
+            config (AppConfig): A fully populated configuration dictionary.
+
+        Returns:
+            None: The file is written in-place at config_path.
+
+        Raises:
+            ValueError: If the ticker list or timing values are invalid.
+            OSError: If the config file cannot be written.
+        """
+        tickers = [symbol.strip().upper() for symbol in config['tickers'] if symbol.strip()]
+        if not tickers:
+            raise ValueError("At least one ticker is required.")
+        if len(tickers) > MAX_TICKERS:
+            raise ValueError(f"Ticker list exceeds MAX_TICKERS ({MAX_TICKERS}).")
+
+        scroll_speed_ms = int(config['scroll_speed_ms'])
+        display_seconds = float(config['display_seconds'])
+        if scroll_speed_ms <= 0:
+            raise ValueError("SCROLL_SPEED_MS must be positive.")
+        if display_seconds <= 0:
+            raise ValueError("DISPLAY_SECONDS must be positive.")
+
+        lines = [
+            "# Symbols to track, comma separated (max 10 — yfinance issues one request per symbol)",
+            f"TICKER={','.join(tickers)}",
+            "",
+            "# Text colors",
+            f"COLOR_POSITIVE={self._rgb_to_hex(config['color_positive'])}",
+            f"COLOR_NEGATIVE={self._rgb_to_hex(config['color_negative'])}",
+            f"COLOR_ERROR_BORDER={self._rgb_to_hex(config['color_error_border'])}",
+            "",
+            "# Background colors",
+            f"COLOR_OPEN={self._rgb_to_hex(config['bg_open'])}",
+            f"COLOR_PREMARKET={self._rgb_to_hex(config['bg_premarket'])}",
+            f"COLOR_AFTER_HOURS={self._rgb_to_hex(config['bg_after_hours'])}",
+            f"COLOR_CLOSED={self._rgb_to_hex(config['bg_closed'])}",
+            "",
+            "# Ticker symbol scroll speed, in milliseconds per character",
+            f"SCROLL_SPEED_MS={scroll_speed_ms}",
+            "",
+            "# How long the price is shown after scrolling (seconds)",
+            f"DISPLAY_SECONDS={display_seconds}",
+        ]
+
+        with open(self.config_path, "w", encoding="utf-8") as file:
+            file.write("\n".join(lines) + "\n")
