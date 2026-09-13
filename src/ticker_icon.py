@@ -192,7 +192,7 @@ class TickerIcon:
         """Background loop that periodically refreshes market data for all tickers."""
         while self.running:
             if self.paused.is_set():
-                self._interruptible_sleep(0.25)
+self._wait_while_paused()
                 continue
 
             with self.lock:
