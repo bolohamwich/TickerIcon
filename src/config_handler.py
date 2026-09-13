@@ -7,6 +7,9 @@ RGB = Tuple[int, int, int]
 # ticker, so the tracked symbol list is capped to keep polling reasonable.
 MAX_TICKERS = 10
 
+# Default icon font size in points; ~44 is the largest that still fits '9.9' in the 64px icon.
+DEFAULT_FONT_SIZE = 36
+
 
 class AppConfig(TypedDict):
     tickers: List[str]
@@ -20,6 +23,7 @@ class AppConfig(TypedDict):
     scroll_speed_ms: int
     display_seconds: float
     continuous_scroll: bool
+    font_size: int
 
 
 class ConfigHandler:
@@ -84,10 +88,13 @@ class ConfigHandler:
 
         scroll_speed_ms = section.getint("SCROLL_SPEED_MS")
         display_seconds = section.getfloat("DISPLAY_SECONDS")
+        font_size = section.getint("FONT_SIZE", fallback=DEFAULT_FONT_SIZE)
         if scroll_speed_ms <= 0:
             raise ValueError("SCROLL_SPEED_MS must be positive.")
         if display_seconds <= 0:
             raise ValueError("DISPLAY_SECONDS must be positive.")
+        if font_size <= 0:
+            raise ValueError("FONT_SIZE must be positive.")
 
         return AppConfig(
             tickers=tickers,
@@ -101,6 +108,7 @@ class ConfigHandler:
             scroll_speed_ms=scroll_speed_ms,
             display_seconds=display_seconds,
             continuous_scroll=section.getboolean("CONTINUOUS_SCROLL", fallback=True),
+            font_size=font_size,
         )
 
     def save(self, config: AppConfig):
@@ -124,10 +132,13 @@ class ConfigHandler:
 
         scroll_speed_ms = int(config['scroll_speed_ms'])
         display_seconds = float(config['display_seconds'])
+        font_size = int(config.get('font_size', DEFAULT_FONT_SIZE))
         if scroll_speed_ms <= 0:
             raise ValueError("SCROLL_SPEED_MS must be positive.")
         if display_seconds <= 0:
             raise ValueError("DISPLAY_SECONDS must be positive.")
+        if font_size <= 0:
+            raise ValueError("FONT_SIZE must be positive.")
 
         lines = [
             "# Symbols to track, comma separated (max 10 — yfinance issues one request per symbol)",
@@ -152,6 +163,9 @@ class ConfigHandler:
             "",
             "# Scroll every tracked symbol continuously in one line instead of one at a time",
             f"CONTINUOUS_SCROLL={'true' if config.get('continuous_scroll', True) else 'false'}",
+            "",
+            "# Icon font size in points (values above ~44 may clip the percentage text)",
+            f"FONT_SIZE={font_size}",
         ]
 
         with open(self.config_path, "w", encoding="utf-8") as file:

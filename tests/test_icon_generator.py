@@ -21,6 +21,26 @@ def icon_gen(config):
     return IconGenerator(config)
 
 
+class TestFontSize:
+    def test_uses_configured_font_size(self, config, monkeypatch):
+        sizes = []
+        monkeypatch.setattr(
+            "src.icon_generator.ImageFont.truetype",
+            lambda path, size: sizes.append(size),
+        )
+        IconGenerator({**config, "font_size": 44})
+        assert sizes == [44]
+
+    def test_defaults_font_size_when_missing(self, config, monkeypatch):
+        sizes = []
+        monkeypatch.setattr(
+            "src.icon_generator.ImageFont.truetype",
+            lambda path, size: sizes.append(size),
+        )
+        IconGenerator(config)
+        assert sizes == [36]
+
+
 class TestGenerateValueFrame:
     def test_returns_64x64_image(self, icon_gen):
         image = icon_gen.generate_value_frame(2.5, "open")

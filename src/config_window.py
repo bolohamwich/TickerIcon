@@ -6,7 +6,7 @@ except ModuleNotFoundError:  # pragma: no cover - only affects headless/non-Wind
     messagebox = None
     ttk = None
 
-from src.config_handler import ConfigHandler, MAX_TICKERS
+from src.config_handler import ConfigHandler, DEFAULT_FONT_SIZE, MAX_TICKERS
 
 
 class ConfigWindow:
@@ -90,6 +90,14 @@ class ConfigWindow:
         display.pack(side="left")
         self.entries["display_seconds"] = display
 
+        row = ttk.Frame(container)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Icon font size (pt)", width=18).pack(side="left")
+        font_size = ttk.Entry(row, width=12)
+        font_size.insert(0, str(self.config.get("font_size", DEFAULT_FONT_SIZE)))
+        font_size.pack(side="left")
+        self.entries["font_size"] = font_size
+
         self.continuous_scroll_var = tk.BooleanVar(value=self.config.get("continuous_scroll", True))
         ttk.Checkbutton(
             container,
@@ -161,6 +169,13 @@ class ConfigWindow:
         if display_seconds <= 0:
             raise ValueError("Display seconds must be positive.")
 
+        try:
+            font_size = int(self.entries["font_size"].get())
+        except ValueError as exc:  # pragma: no cover - GUI-side validation
+            raise ValueError("Font size must be an integer.") from exc
+        if font_size <= 0:
+            raise ValueError("Font size must be positive.")
+
         return {
             "tickers": tickers,
             "color_positive": get_hex("color_positive"),
@@ -173,6 +188,7 @@ class ConfigWindow:
             "scroll_speed_ms": scroll_speed_ms,
             "display_seconds": display_seconds,
             "continuous_scroll": bool(self.continuous_scroll_var.get()),
+            "font_size": font_size,
         }
 
     def show(self):

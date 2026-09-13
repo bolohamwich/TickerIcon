@@ -133,6 +133,7 @@ def test_config_window_collects_valid_config(monkeypatch):
     window.entries["bg_closed"].value = "#131415"
     window.entries["scroll_speed_ms"].value = "320"
     window.entries["display_seconds"].value = "7.5"
+    window.entries["font_size"].value = "40"
     window.continuous_scroll_var.set(True)
 
     collected = window._collect_config()
@@ -140,6 +141,7 @@ def test_config_window_collects_valid_config(monkeypatch):
     assert collected["tickers"] == ["AMD", "MSFT"]
     assert collected["scroll_speed_ms"] == 320
     assert collected["display_seconds"] == 7.5
+    assert collected["font_size"] == 40
     assert collected["color_positive"] == (1, 2, 3)
     assert collected["bg_closed"] == (19, 20, 21)
     assert collected["continuous_scroll"] is True
@@ -176,6 +178,7 @@ def test_config_window_save_writes_file_and_calls_callback(tmp_path, monkeypatch
     window.entries["bg_closed"].value = "#131415"
     window.entries["scroll_speed_ms"].value = "180"
     window.entries["display_seconds"].value = "3.5"
+    window.entries["font_size"].value = "44"
     window.continuous_scroll_var.set(True)
 
     callback_calls = []
@@ -189,6 +192,7 @@ def test_config_window_save_writes_file_and_calls_callback(tmp_path, monkeypatch
     assert saved["scroll_speed_ms"] == 180
     assert saved["display_seconds"] == 3.5
     assert saved["continuous_scroll"] is True
+    assert saved["font_size"] == 44
 
 
 def test_config_window_rejects_invalid_positive_values(monkeypatch):
@@ -222,4 +226,40 @@ def test_config_window_rejects_invalid_positive_values(monkeypatch):
     window.entries["display_seconds"].value = "-1"
 
     with pytest.raises(ValueError, match="positive"):
+        window._collect_config()
+
+
+def test_config_window_rejects_non_positive_font_size(monkeypatch):
+    fake_tk = FakeTkModule()
+    monkeypatch.setattr(config_window_module, "tk", fake_tk)
+    monkeypatch.setattr(config_window_module, "ttk", fake_tk.ttk)
+    monkeypatch.setattr(config_window_module, "messagebox", fake_tk.messagebox)
+
+    window = config_window_module.ConfigWindow("config.cfg", {
+        "tickers": ["AMD"],
+        "color_positive": (1, 2, 3),
+        "color_negative": (4, 5, 6),
+        "color_error_border": (7, 8, 9),
+        "bg_open": (10, 11, 12),
+        "bg_premarket": (13, 14, 15),
+        "bg_after_hours": (16, 17, 18),
+        "bg_closed": (19, 20, 21),
+        "scroll_speed_ms": 100,
+        "display_seconds": 2.0,
+        "font_size": 36,
+    })
+
+    window.entries["tickers"].value = "AMD"
+    window.entries["color_positive"].value = "#010203"
+    window.entries["color_negative"].value = "#040506"
+    window.entries["color_error_border"].value = "#070809"
+    window.entries["bg_open"].value = "#0A0B0C"
+    window.entries["bg_premarket"].value = "#0D0E0F"
+    window.entries["bg_after_hours"].value = "#101112"
+    window.entries["bg_closed"].value = "#131415"
+    window.entries["scroll_speed_ms"].value = "100"
+    window.entries["display_seconds"].value = "2.0"
+    window.entries["font_size"].value = "0"
+
+    with pytest.raises(ValueError, match="Font size must be positive"):
         window._collect_config()
