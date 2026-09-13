@@ -32,6 +32,7 @@ exe = EXE(
     # UPX-compressed binaries closely resemble how malware droppers pack
     # themselves, and are a common cause of AV/Defender false positives.
     upx=False,
+    icon='assets/tickericon.ico',
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,

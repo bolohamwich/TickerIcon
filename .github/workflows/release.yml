@@ -21,6 +21,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Set application version
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $version = $env:RELEASE_TAG -replace '^[vV]', ''
+          (Get-Content src/version.py) -replace 'APP_VERSION = ".*"', ('APP_VERSION = "' + $version + '"') | Set-Content -Encoding utf8 src/version.py
+
       - name: Build executable
         run: pyinstaller tickericon.spec
 
@@ -29,7 +37,13 @@ jobs:
           Copy-Item config.cfg dist/TickerIcon/config.cfg
           Compress-Archive -Path dist/TickerIcon/* -DestinationPath dist/TickerIcon.zip
 
+      - name: Build Windows installer
+        shell: powershell
+        run: |
+          $version = "${{ github.event.release.tag_name }}" -replace '^[vV]', ''
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" installer\TickerIcon.iss
+
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/TickerIcon.zip --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" installer/output/TickerIcon-Setup.exe dist/TickerIcon.zip --clobber
