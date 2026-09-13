@@ -55,6 +55,21 @@ def test_on_quit_stops_running_and_the_tray_icon(app):
     mock_icon.stop.assert_called_once()
 
 
+class TestTogglePause:
+    def test_first_call_pauses_and_shows_app_icon(self, app):
+        app.on_toggle_pause(app.tray_icon, MagicMock())
+
+        assert app.paused.is_set() is True
+        assert app.tray_icon.icon is not None
+        assert app.tray_icon.title == "TickerIcon (Paused)"
+
+    def test_second_call_unpauses(self, app):
+        app.on_toggle_pause(app.tray_icon, MagicMock())
+        app.on_toggle_pause(app.tray_icon, MagicMock())
+
+        assert app.paused.is_set() is False
+
+
 def test_on_check_for_updates_starts_only_one_worker(app):
     menu_item = MagicMock()
     worker = MagicMock()
@@ -272,3 +287,36 @@ class TestDisplayLoop:
         app._display_loop()
 
         app._scroll_symbol.assert_not_called()
+
+    def test_shows_app_icon_and_skips_ticker_cycle_when_paused(self, app):
+        app._scroll_symbol = MagicMock()
+        app._show_value = MagicMock()
+        app.running = True
+        app.data_ready.set()
+        app.paused.set()
+
+        def unpause_then_stop():
+            app.paused.clear()
+            app.running = False
+
+        with patch.object(app, "_wait_while_paused", side_effect=unpause_then_stop):
+            app._display_loop()
+
+        app._scroll_symbol.assert_not_called()
+        app._show_value.assert_not_called()
+        assert app.tray_icon.title == "TickerIcon (Paused)"
+
+
+class TestFetchLoopPause:
+    def test_skips_fetching_while_paused(self, app):
+        app.running = True
+        app.paused.set()
+        app.api.fetch_all = MagicMock()
+
+        def stop_after_delay(*_args):
+            app.running = False
+
+        with patch.object(app, "_wait_while_paused", side_effect=stop_after_delay):
+            app._fetch_loop()
+
+        app.api.fetch_all.assert_not_called()

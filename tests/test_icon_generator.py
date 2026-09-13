@@ -43,6 +43,17 @@ class TestGenerateValueFrame:
         assert image.getpixel((0, 0)) == config["bg_open"]
 
 
+class TestGenerateAppIcon:
+    def test_returns_64x64_image(self, icon_gen):
+        image = icon_gen.generate_app_icon()
+        assert image.size == (64, 64)
+
+    def test_falls_back_to_loading_frame_when_icon_file_missing(self, icon_gen, config):
+        icon_gen._app_icon = None
+        image = icon_gen.generate_app_icon()
+        assert image.getpixel((0, 0)) == config["bg_closed"]
+
+
 class TestGenerateLoadingFrame:
     def test_returns_64x64_image(self, icon_gen):
         image = icon_gen.generate_loading_frame()

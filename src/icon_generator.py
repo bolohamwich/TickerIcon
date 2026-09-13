@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 
 from src.config_handler import AppConfig
@@ -8,6 +11,17 @@ class IconGenerator:
     Generates dynamic 64x64 PIL Images for the system tray icon,
     handling color states, typography scaling, and error borders.
     """
+
+    @staticmethod
+    def _resolve_app_icon_path() -> Path:
+        """
+        Locates assets/tickericon.ico next to the executable (frozen) or the project root (dev).
+
+        Returns:
+            Path: The resolved filesystem path to the application icon file.
+        """
+        base_dir = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent.parent
+        return base_dir / "assets" / "tickericon.ico"
 
     def __init__(self, config: AppConfig):
         """
@@ -33,6 +47,12 @@ class IconGenerator:
             self.font = ImageFont.truetype("arialbd.ttf", 36)
         except IOError:
             self.font = ImageFont.load_default()
+
+        # Pre-load the static application icon, shown while idle (initializing/paused)
+        try:
+            self._app_icon = Image.open(self._resolve_app_icon_path()).convert('RGB').resize((64, 64))
+        except (IOError, OSError):
+            self._app_icon = None
 
     def generate_value_frame(self, change_pct: float, state: str, has_error: bool = False) -> Image.Image:
         """
@@ -99,6 +119,17 @@ class IconGenerator:
         draw.text((x, y), text, fill=text_color, font=self.font)
 
         return img
+
+    def generate_app_icon(self) -> Image.Image:
+        """
+        Returns the static application icon, shown while idle (initializing or paused).
+
+        Returns:
+            Image.Image: A 64x64 Pillow Image ready for pystray.
+        """
+        if self._app_icon is not None:
+            return self._app_icon.copy()
+        return self.generate_loading_frame()
 
     def generate_scroll_frame(self, symbol: str, state: str, offset: int) -> Image.Image:
         """
