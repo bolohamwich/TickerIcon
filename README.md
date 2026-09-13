@@ -4,7 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/bolohamwich/TickerIcon)](https://github.com/bolohamwich/TickerIcon/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/bolohamwich/TickerIcon)](LICENSE)
 
-A lightweight, open-source Python application that embeds a live, automatically updating stock ticker directly into Windows system tray. 
+A lightweight, open-source Windows application that embeds a live, automatically updating stock ticker directly into the system tray. 
 Relies on Yahoo Finance for 1-minute updates during regular, pre-market, and after-hours trading sessions.
 
 ## Features
@@ -14,21 +14,19 @@ Relies on Yahoo Finance for 1-minute updates during regular, pre-market, and aft
 * **Updates:** Use the tray menu's **Check for Updates** command to download and launch the latest installer.
 
 ## Prerequisites
-* Python 3.9 (or newer)
 * Windows 10 or 11
 
 ## Installation
 
-1. Clone or download this repository.
-2. Open your terminal or command prompt in the folder directory.
-3. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Download `TickerIcon-Setup.exe` from the [latest release](https://github.com/bolohamwich/TickerIcon/releases/latest).
+2. Run the installer and follow the setup prompts.
+3. Launch TickerIcon from the Start Menu.
+
+If you prefer a portable copy, each release also includes `TickerIcon.zip`.
 
 ## Usage
 
-Start `main.pyw` to launch the application. Because it uses the `.pyw` extension, it will run silently in the background without opening a command prompt window. 
+Launch TickerIcon from the Start Menu or by opening the installed application directly. It runs silently in the background without opening a command prompt window. 
 
 *Note: Windows hides new tray icons in the overflow menu by default. Click the up-arrow `^` on your taskbar and drag the new stock icon down to the visible portion of your taskbar so it is always visible.*
 
@@ -42,6 +40,8 @@ Start `main.pyw` to launch the application. Because it uses the `.pyw` extension
 4. Browse to your `main.pyw` file and complete the wizard.
 
 ## Building a Windows Package
+
+Python is only required when running the project from source or building release artifacts.
 
 Build the application on Windows because PyInstaller produces a
 platform-specific executable:
