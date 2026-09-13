@@ -60,7 +60,7 @@ class TestGenerateAppIcon:
 
         path = IconGenerator._resolve_app_icon_path()
 
-        assert str(path) == "/bundle/_internal/assets/tickericon.ico"
+        assert path.as_posix() == "/bundle/_internal/assets/tickericon.ico"
 
     def test_resolve_path_uses_project_root_in_dev(self):
         path = IconGenerator._resolve_app_icon_path()
