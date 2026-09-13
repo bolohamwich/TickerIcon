@@ -102,10 +102,27 @@ class ConfigHandler:
 
         Returns:
             None: The file is written in-place at config_path.
+
+        Raises:
+            ValueError: If the ticker list or timing values are invalid.
+            OSError: If the config file cannot be written.
         """
+        tickers = [symbol.strip().upper() for symbol in config['tickers'] if symbol.strip()]
+        if not tickers:
+            raise ValueError("At least one ticker is required.")
+        if len(tickers) > MAX_TICKERS:
+            raise ValueError(f"Ticker list exceeds MAX_TICKERS ({MAX_TICKERS}).")
+
+        scroll_speed_ms = int(config['scroll_speed_ms'])
+        display_seconds = float(config['display_seconds'])
+        if scroll_speed_ms <= 0:
+            raise ValueError("SCROLL_SPEED_MS must be positive.")
+        if display_seconds <= 0:
+            raise ValueError("DISPLAY_SECONDS must be positive.")
+
         lines = [
             "# Symbols to track, comma separated (max 10 — yfinance issues one request per symbol)",
-            f"TICKER={','.join(config['tickers'])}",
+            f"TICKER={','.join(tickers)}",
             "",
             "# Text colors",
             f"COLOR_POSITIVE={self._rgb_to_hex(config['color_positive'])}",
@@ -119,10 +136,10 @@ class ConfigHandler:
             f"COLOR_CLOSED={self._rgb_to_hex(config['bg_closed'])}",
             "",
             "# Ticker symbol scroll speed, in milliseconds per character",
-            f"SCROLL_SPEED_MS={int(config['scroll_speed_ms'])}",
+            f"SCROLL_SPEED_MS={scroll_speed_ms}",
             "",
             "# How long the price is shown after scrolling (seconds)",
-            f"DISPLAY_SECONDS={config['display_seconds']}",
+            f"DISPLAY_SECONDS={display_seconds}",
         ]
 
         with open(self.config_path, "w", encoding="utf-8") as file:

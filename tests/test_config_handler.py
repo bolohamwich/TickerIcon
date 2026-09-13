@@ -92,6 +92,25 @@ def test_save_round_trips_config(tmp_path):
     assert loaded == original
 
 
+def test_save_rejects_too_many_tickers(tmp_path):
+    path = tmp_path / "config.cfg"
+    config = {
+        "tickers": [f"SYM{i}" for i in range(MAX_TICKERS + 1)],
+        "color_positive": (1, 2, 3),
+        "color_negative": (4, 5, 6),
+        "color_error_border": (7, 8, 9),
+        "bg_open": (10, 11, 12),
+        "bg_premarket": (13, 14, 15),
+        "bg_after_hours": (16, 17, 18),
+        "bg_closed": (19, 20, 21),
+        "scroll_speed_ms": 100,
+        "display_seconds": 3.0,
+    }
+
+    with pytest.raises(ValueError, match="MAX_TICKERS"):
+        ConfigHandler(str(path)).save(config)
+
+
 @pytest.mark.parametrize("hex_value, expected", [
     ("#0FAF50", (15, 175, 80)),
     ("0FAF50", (15, 175, 80)),

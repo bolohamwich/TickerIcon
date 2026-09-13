@@ -6,7 +6,7 @@ except ModuleNotFoundError:  # pragma: no cover - only affects headless/non-Wind
     messagebox = None
     ttk = None
 
-from src.config_handler import ConfigHandler
+from src.config_handler import ConfigHandler, MAX_TICKERS
 
 
 class ConfigWindow:
@@ -107,6 +107,8 @@ class ConfigWindow:
             if self.on_save is not None:
                 self.on_save(config)
             self.root.destroy()
+        except OSError as exc:
+            messagebox.showerror("Save failed", f"Could not write config file: {exc}")
         except ValueError as exc:
             messagebox.showerror("Invalid settings", str(exc))
 
@@ -126,6 +128,8 @@ class ConfigWindow:
         tickers = [item.strip().upper() for item in tickers_raw.split(",") if item.strip()]
         if not tickers:
             raise ValueError("At least one ticker is required.")
+        if len(tickers) > MAX_TICKERS:
+            raise ValueError(f"Ticker list exceeds MAX_TICKERS ({MAX_TICKERS}).")
 
         def get_hex(key: str):
             value = self.entries[key].get().strip()
@@ -140,11 +144,15 @@ class ConfigWindow:
             scroll_speed_ms = int(self.entries["scroll_speed_ms"].get())
         except ValueError as exc:  # pragma: no cover - GUI-side validation
             raise ValueError("Scroll speed must be an integer.") from exc
+        if scroll_speed_ms <= 0:
+            raise ValueError("Scroll speed must be positive.")
 
         try:
             display_seconds = float(self.entries["display_seconds"].get())
         except ValueError as exc:  # pragma: no cover - GUI-side validation
             raise ValueError("Display seconds must be a number.") from exc
+        if display_seconds <= 0:
+            raise ValueError("Display seconds must be positive.")
 
         return {
             "tickers": tickers,

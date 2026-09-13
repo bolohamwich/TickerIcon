@@ -32,6 +32,7 @@ class TickerIcon:
         self.config = ConfigHandler(config_path).load()
         self.api = MarketAPI(self.config['tickers'])
         self.icon_gen = IconGenerator(self.config)
+        self.display_thread = None
 
         # Latest fetched data per symbol, shared between the fetch and display
         # threads, guarded by self.lock.
@@ -77,7 +78,8 @@ class TickerIcon:
 
         # Start the background fetch and display loops
         threading.Thread(target=self._fetch_loop, daemon=True).start()
-        threading.Thread(target=self._display_loop, daemon=True).start()
+        self.display_thread = threading.Thread(target=self._display_loop, daemon=True)
+        self.display_thread.start()
 
         # Run system tray (this blocks the main thread until closed)
         self.tray_icon.run()
@@ -94,24 +96,39 @@ class TickerIcon:
         icon.stop()
 
     def on_settings(self, icon, menu_item):
-        """Opens the configuration window so the user can edit config.cfg."""
+        """Open a settings window from the tray menu.
+
+        Args:
+            icon (pystray.Icon): The tray icon instance.
+            menu_item (pystray.MenuItem): The menu item that triggered the call.
+
+        Returns:
+            None: The settings window is created and run in the same thread as its Tk root.
+        """
         try:
             window = ConfigWindow(self.config_path, self.config, on_save=self._apply_config)
+            window.show()
         except RuntimeError as exc:
             self._notify(str(exc))
-            return
-
-        threading.Thread(target=window.show, daemon=True).start()
 
     def _apply_config(self, config):
-        """Reloads the in-memory runtime state after a config save."""
-        self.config = config
-        self.api = MarketAPI(self.config['tickers'])
-        self.icon_gen = IconGenerator(self.config)
-        self.snapshot = {
-            symbol: StockData(symbol=symbol) for symbol in self.config['tickers']
-        }
-        self.data_ready.clear()
+        """Reloads the in-memory runtime state after a config save.
+
+        Args:
+            config (dict): The updated application configuration.
+
+        Returns:
+            None: The active fetch/display loops are synchronized with the new values.
+        """
+        with self.lock:
+            self.config = config
+            self.api = MarketAPI(self.config['tickers'])
+            self.icon_gen = IconGenerator(self.config)
+            self.snapshot = {
+                symbol: StockData(symbol=symbol) for symbol in self.config['tickers']
+            }
+            self.data_ready.clear()
+
         if self.tray_icon is not None:
             self.tray_icon.notify("Settings saved. TickerIcon will use the new configuration.", "TickerIcon")
 
@@ -156,10 +173,17 @@ class TickerIcon:
     def _fetch_loop(self):
         """Background loop that periodically refreshes market data for all tickers."""
         while self.running:
-            snapshot = self.api.fetch_all()
             with self.lock:
+                api = self.api
+                config_version = self.config
+
+            snapshot = api.fetch_all()
+
+            with self.lock:
+                if api is not self.api or config_version is not self.config:
+                    continue
                 self.snapshot = snapshot
-            self.data_ready.set()
+                self.data_ready.set()
 
             all_closed = all(
                 data.state == 'closed' and not data.has_error
@@ -183,33 +207,61 @@ class TickerIcon:
         while self.running and not self.data_ready.is_set():
             self.data_ready.wait(timeout=0.1)
 
-        for symbol in itertools.cycle(self.config['tickers']):
-            if not self.running:
-                return
-
+        while self.running:
             with self.lock:
-                data = self.snapshot.get(symbol, StockData(symbol=symbol))
+                symbols = list(self.config['tickers'])
+                display_seconds = self.config['display_seconds']
+                scroll_speed_ms = self.config['scroll_speed_ms']
 
-            self._scroll_symbol(symbol, data.state)
+            if not symbols:
+                self._interruptible_sleep(0.25)
+                continue
+
+            for symbol in itertools.cycle(symbols):
+                if not self.running:
+                    return
+
+                with self.lock:
+                    current_symbols = list(self.config['tickers'])
+                    if current_symbols != symbols:
+                        break
+                    data = self.snapshot.get(symbol, StockData(symbol=symbol))
+                    display_seconds = self.config['display_seconds']
+                    scroll_speed_ms = self.config['scroll_speed_ms']
+
+                try:
+                    self._scroll_symbol(symbol, data.state, scroll_speed_ms)
+                except TypeError:
+                    self._scroll_symbol(symbol, data.state)
+                if not self.running:
+                    return
+
+                self._show_value(data)
+                self._interruptible_sleep(display_seconds)
+
             if not self.running:
                 return
 
-            self._show_value(data)
-
-            self._interruptible_sleep(self.config['display_seconds'])
-
-    def _scroll_symbol(self, symbol: str, state: str):
+    def _scroll_symbol(self, symbol: str, state: str, scroll_speed_ms: float = None):
         """
         Animates `symbol` scrolling right-to-left across the icon.
 
         Args:
             symbol (str): The ticker symbol to scroll, e.g. 'AMD'.
             state (str): Current market state, used for the background color.
+            scroll_speed_ms (float, optional): Current scroll speed in ms per char.
+
+        Returns:
+            None: One animation frame sequence is rendered onto the tray icon.
         """
+        if scroll_speed_ms is None:
+            with self.lock:
+                scroll_speed_ms = self.config['scroll_speed_ms']
+
         text_width = self.icon_gen.measure_text_width(symbol)
         distance = 64 + text_width
 
-        duration_s = max(len(symbol), 1) * (self.config['scroll_speed_ms'] / 1000.0)
+        duration_s = max(len(symbol), 1) * (scroll_speed_ms / 1000.0)
         steps = max(int(duration_s / SCROLL_FRAME_INTERVAL_S), 1)
 
         for step in range(steps + 1):
