@@ -190,6 +190,7 @@ class TestDisplayLoop:
         app._scroll_symbol = fake_scroll
         app._show_value = MagicMock()
         app.running = True
+        app.data_ready.set()
 
         with patch.object(app, "_interruptible_sleep"):
             app._display_loop()
@@ -199,6 +200,21 @@ class TestDisplayLoop:
     def test_exits_immediately_when_not_running(self, app):
         app._scroll_symbol = MagicMock()
         app.running = False
+        app.data_ready.set()
+
+        app._display_loop()
+
+        app._scroll_symbol.assert_not_called()
+
+    def test_waits_for_first_fetch_before_showing_values(self, app):
+        app._scroll_symbol = MagicMock()
+        app.running = True
+
+        def flip_after_delay():
+            time.sleep(0.05)
+            app.running = False
+
+        threading.Thread(target=flip_after_delay, daemon=True).start()
 
         app._display_loop()
 

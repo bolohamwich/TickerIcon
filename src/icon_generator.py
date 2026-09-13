@@ -75,6 +75,31 @@ class IconGenerator:
 
         return img
 
+    def generate_loading_frame(self) -> Image.Image:
+        """
+        Creates a static placeholder icon shown before the first data fetch completes.
+
+        Returns:
+            Image.Image: A 64x64 Pillow Image ready for pystray.
+        """
+        bg_color = self.bg_colors['closed']
+        text_color = self._contrast_text_color(bg_color)
+
+        img = Image.new('RGB', (64, 64), color=bg_color)
+        draw = ImageDraw.Draw(img)
+
+        text = "..."
+        bbox = draw.textbbox((0, 0), text, font=self.font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+        x = (64 - text_width) / 2
+        y = (64 - text_height) / 2 - 4  # Slight upward offset for visual balance
+
+        draw.text((x, y), text, fill=text_color, font=self.font)
+
+        return img
+
     def generate_scroll_frame(self, symbol: str, state: str, offset: int) -> Image.Image:
         """
         Creates one frame of the right-to-left ticker symbol marquee.

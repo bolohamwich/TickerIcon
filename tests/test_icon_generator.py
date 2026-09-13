@@ -43,6 +43,22 @@ class TestGenerateValueFrame:
         assert image.getpixel((0, 0)) == config["bg_open"]
 
 
+class TestGenerateLoadingFrame:
+    def test_returns_64x64_image(self, icon_gen):
+        image = icon_gen.generate_loading_frame()
+        assert image.size == (64, 64)
+
+    def test_uses_closed_background_color(self, icon_gen, config):
+        image = icon_gen.generate_loading_frame()
+        assert image.getpixel((0, 0)) == config["bg_closed"]
+
+    def test_draws_readable_placeholder_text(self, icon_gen, config):
+        image = icon_gen.generate_loading_frame()
+        pixels = list(image.getdata())
+        assert config["bg_closed"] in pixels
+        assert any(pixel != config["bg_closed"] for pixel in pixels)
+
+
 class TestGenerateScrollFrame:
     def test_returns_64x64_image(self, icon_gen):
         image = icon_gen.generate_scroll_frame("AMD", "closed", offset=10)

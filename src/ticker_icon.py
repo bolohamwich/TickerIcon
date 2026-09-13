@@ -37,6 +37,10 @@ class TickerIcon:
         }
         self.lock = threading.Lock()
 
+        # Set once the first fetch completes, so the display loop doesn't
+        # show stale/zeroed data before real data is available.
+        self.data_ready = threading.Event()
+
         self.running = False
         self.tray_icon = None
 
@@ -49,7 +53,7 @@ class TickerIcon:
 
         # Generate initial placeholder icon
         first_symbol = self.config['tickers'][0]
-        initial_image = self.icon_gen.generate_value_frame(0.0, 'closed')
+        initial_image = self.icon_gen.generate_loading_frame()
         self.tray_icon = pystray.Icon(
             "stock_ticker",
             initial_image,
@@ -81,6 +85,7 @@ class TickerIcon:
             snapshot = self.api.fetch_all()
             with self.lock:
                 self.snapshot = snapshot
+            self.data_ready.set()
 
             all_closed = all(
                 data.state == 'closed' and not data.has_error
@@ -101,6 +106,9 @@ class TickerIcon:
 
     def _display_loop(self):
         """Background loop that cycles through tickers, scrolling then showing each one."""
+        while self.running and not self.data_ready.is_set():
+            self.data_ready.wait(timeout=0.1)
+
         for symbol in itertools.cycle(self.config['tickers']):
             if not self.running:
                 return
