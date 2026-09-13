@@ -298,26 +298,27 @@ class TickerIcon:
             symbols = list(self.config['tickers'])
             scroll_speed_ms = self.config['scroll_speed_ms']
             snapshot = dict(self.snapshot)
+            continuous_gen = self.continuous_gen
 
         if not symbols:
             self._interruptible_sleep(0.25)
             return
 
-        self.continuous_gen.build(symbols, snapshot)
+        continuous_gen.build(symbols, snapshot)
         pixels_per_frame = self._continuous_pixels_per_frame(scroll_speed_ms)
 
         offset = 0
         last_symbol = None
-        while offset < self.continuous_gen.width:
+        while offset < continuous_gen.width:
             if not self.running or self.paused.is_set():
                 return
 
-            data = self.continuous_gen.symbol_at(offset)
+            data = continuous_gen.symbol_at(offset)
             if data is not None and data.symbol != last_symbol:
                 self._update_tooltip(data)
                 last_symbol = data.symbol
 
-            self.tray_icon.icon = self.continuous_gen.render_frame(offset)
+            self.tray_icon.icon = continuous_gen.render_frame(offset)
             time.sleep(SCROLL_FRAME_INTERVAL_S)
             offset += pixels_per_frame
 

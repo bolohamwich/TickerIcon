@@ -51,6 +51,24 @@ def test_load_defaults_continuous_scroll_to_false_when_missing(tmp_path):
     assert config["continuous_scroll"] is False
 
 
+def test_load_rejects_non_positive_scroll_speed(tmp_path):
+    content = CONFIG_CONTENT.replace("SCROLL_SPEED_MS=500", "SCROLL_SPEED_MS=0")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    with pytest.raises(ValueError, match="SCROLL_SPEED_MS"):
+        ConfigHandler(str(path)).load()
+
+
+def test_load_rejects_non_positive_display_seconds(tmp_path):
+    content = CONFIG_CONTENT.replace("DISPLAY_SECONDS=8", "DISPLAY_SECONDS=0")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    with pytest.raises(ValueError, match="DISPLAY_SECONDS"):
+        ConfigHandler(str(path)).load()
+
+
 def test_load_strips_whitespace_and_uppercases_tickers(tmp_path):
     content = CONFIG_CONTENT.replace("TICKER=AMD,AAPL,MSFT", "TICKER= amd , aapl ,msft ")
     path = tmp_path / "config.cfg"

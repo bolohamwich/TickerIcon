@@ -82,6 +82,13 @@ class ConfigHandler:
         if len(tickers) > MAX_TICKERS:
             tickers = tickers[:MAX_TICKERS]
 
+        scroll_speed_ms = section.getint("SCROLL_SPEED_MS")
+        display_seconds = section.getfloat("DISPLAY_SECONDS")
+        if scroll_speed_ms <= 0:
+            raise ValueError("SCROLL_SPEED_MS must be positive.")
+        if display_seconds <= 0:
+            raise ValueError("DISPLAY_SECONDS must be positive.")
+
         return AppConfig(
             tickers=tickers,
             color_positive=self._hex_to_rgb(section["COLOR_POSITIVE"]),
@@ -91,8 +98,8 @@ class ConfigHandler:
             bg_premarket=self._hex_to_rgb(section["COLOR_PREMARKET"]),
             bg_after_hours=self._hex_to_rgb(section["COLOR_AFTER_HOURS"]),
             bg_closed=self._hex_to_rgb(section["COLOR_CLOSED"]),
-            scroll_speed_ms=section.getint("SCROLL_SPEED_MS"),
-            display_seconds=section.getfloat("DISPLAY_SECONDS"),
+            scroll_speed_ms=scroll_speed_ms,
+            display_seconds=display_seconds,
             continuous_scroll=section.getboolean("CONTINUOUS_SCROLL", fallback=False),
         )
 
