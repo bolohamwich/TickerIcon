@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 from src.version import APP_VERSION
 
-LATEST_RELEASE_URL = "https://api.github.com/repos/boloh/TickerIcon/releases/latest"
+LATEST_RELEASE_URL = "https://api.github.com/repos/bolohamwich/TickerIcon/releases/latest"
 INSTALLER_ASSET_NAME = "TickerIcon-Setup.exe"
 
 
