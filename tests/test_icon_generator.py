@@ -53,6 +53,22 @@ class TestGenerateAppIcon:
         image = icon_gen.generate_app_icon()
         assert image.getpixel((0, 0)) == config["bg_closed"]
 
+    def test_resolve_path_uses_meipass_when_frozen(self, monkeypatch):
+        import sys
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "_MEIPASS", "/bundle/_internal", raising=False)
+
+        path = IconGenerator._resolve_app_icon_path()
+
+        assert str(path) == "/bundle/_internal/assets/tickericon.ico"
+
+    def test_resolve_path_uses_project_root_in_dev(self):
+        path = IconGenerator._resolve_app_icon_path()
+
+        assert path.name == "tickericon.ico"
+        assert path.parent.name == "assets"
+        assert path.exists()
+
 
 class TestGenerateLoadingFrame:
     def test_returns_64x64_image(self, icon_gen):

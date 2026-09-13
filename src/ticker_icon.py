@@ -54,6 +54,8 @@ class TickerIcon:
         self.update_lock = threading.Lock()
         self.update_in_progress = False
         self.update_menu_item = None
+        self.settings_lock = threading.Lock()
+        self.settings_open = False
 
     def start(self):
         """Initializes and runs the system tray application."""
@@ -107,13 +109,29 @@ class TickerIcon:
             menu_item (pystray.MenuItem): The menu item that triggered the call.
 
         Returns:
-            None: The settings window is created and run in the same thread as its Tk root.
+            None: The window runs on its own daemon thread so the tray menu
+                handler is never blocked and shutdown is never held up.
+        """
+        with self.settings_lock:
+            if self.settings_open:
+                return
+            self.settings_open = True
+        threading.Thread(target=self._run_settings_window, daemon=True).start()
+
+    def _run_settings_window(self):
+        """Creates and runs the settings window, releasing the reopen guard on close.
+
+        Returns:
+            None: Blocks its own thread until the window is closed.
         """
         try:
             window = ConfigWindow(self.config_path, self.config, on_save=self._apply_config)
             window.show()
         except RuntimeError as exc:
             self._notify(str(exc))
+        finally:
+            with self.settings_lock:
+                self.settings_open = False
 
     def on_toggle_pause(self, icon, menu_item):
         """
@@ -141,14 +159,19 @@ class TickerIcon:
             None: The active fetch/display loops are synchronized with the new values.
         """
         with self.lock:
+            old_snapshot = self.snapshot
             self.config = config
             self.api = MarketAPI(self.config['tickers'])
             self.icon_gen = IconGenerator(self.config)
             self.continuous_gen = ContinuousScrollGenerator(self.icon_gen)
+            # Keep already-fetched data for retained tickers so a settings save
+            # (e.g. toggling scroll mode) never shows zeroed placeholders.
             self.snapshot = {
-                symbol: StockData(symbol=symbol) for symbol in self.config['tickers']
+                symbol: old_snapshot.get(symbol, StockData(symbol=symbol))
+                for symbol in self.config['tickers']
             }
-            self.data_ready.clear()
+            if any(symbol not in old_snapshot for symbol in self.config['tickers']):
+                self.data_ready.clear()
 
         if self.tray_icon is not None:
             self.tray_icon.notify("Settings saved. TickerIcon will use the new configuration.", "TickerIcon")
@@ -225,18 +248,34 @@ class TickerIcon:
             else:
                 sleep_seconds = 60
 
-            self._interruptible_sleep(sleep_seconds)
+            self._sleep_between_fetches(sleep_seconds)
+
+    def _sleep_between_fetches(self, seconds: float):
+        """
+        Sleeps between fetches, waking early on shutdown, pause, or when a
+        config save cleared data_ready (new tickers need an immediate fetch).
+
+        Args:
+            seconds (float): Maximum time to sleep for, in seconds.
+        """
+        end_time = time.monotonic() + seconds
+        while (self.running and not self.paused.is_set()
+                and self.data_ready.is_set() and time.monotonic() < end_time):
+            time.sleep(0.1)
 
     def _display_loop(self):
         """Background loop that cycles through tickers, scrolling then showing each one."""
-        while self.running and not self.data_ready.is_set():
-            self.data_ready.wait(timeout=0.1)
-
         while self.running:
             if self.paused.is_set():
                 self.tray_icon.icon = self.icon_gen.generate_app_icon()
                 self.tray_icon.title = "TickerIcon (Paused)"
                 self._wait_while_paused()
+                continue
+
+            if not self.data_ready.is_set():
+                self.tray_icon.icon = self.icon_gen.generate_app_icon()
+                self.tray_icon.title = "TickerIcon (Loading...)"
+                self.data_ready.wait(timeout=0.1)
                 continue
 
             with self.lock:
