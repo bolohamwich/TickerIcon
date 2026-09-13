@@ -13,6 +13,7 @@ COLOR_AFTER_HOURS=#E0E0FF
 COLOR_CLOSED=#323232
 SCROLL_SPEED_MS=500
 DISPLAY_SECONDS=8
+CONTINUOUS_SCROLL=true
 """
 
 
@@ -37,6 +38,17 @@ def test_load_parses_tickers_and_colors(config_file):
     assert config["bg_closed"] == (50, 50, 50)
     assert config["scroll_speed_ms"] == 500
     assert config["display_seconds"] == 8.0
+    assert config["continuous_scroll"] is True
+
+
+def test_load_defaults_continuous_scroll_to_false_when_missing(tmp_path):
+    content = CONFIG_CONTENT.replace("CONTINUOUS_SCROLL=true\n", "")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["continuous_scroll"] is False
 
 
 def test_load_strips_whitespace_and_uppercases_tickers(tmp_path):
@@ -84,6 +96,7 @@ def test_save_round_trips_config(tmp_path):
         "bg_closed": (190, 200, 210),
         "scroll_speed_ms": 250,
         "display_seconds": 5.5,
+        "continuous_scroll": True,
     }
 
     ConfigHandler(str(path)).save(original)

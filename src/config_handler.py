@@ -19,6 +19,7 @@ class AppConfig(TypedDict):
     bg_closed: RGB
     scroll_speed_ms: int
     display_seconds: float
+    continuous_scroll: bool
 
 
 class ConfigHandler:
@@ -92,6 +93,7 @@ class ConfigHandler:
             bg_closed=self._hex_to_rgb(section["COLOR_CLOSED"]),
             scroll_speed_ms=section.getint("SCROLL_SPEED_MS"),
             display_seconds=section.getfloat("DISPLAY_SECONDS"),
+            continuous_scroll=section.getboolean("CONTINUOUS_SCROLL", fallback=False),
         )
 
     def save(self, config: AppConfig):
@@ -140,6 +142,9 @@ class ConfigHandler:
             "",
             "# How long the price is shown after scrolling (seconds)",
             f"DISPLAY_SECONDS={display_seconds}",
+            "",
+            "# Scroll every tracked symbol continuously in one line instead of one at a time",
+            f"CONTINUOUS_SCROLL={'true' if config.get('continuous_scroll', False) else 'false'}",
         ]
 
         with open(self.config_path, "w", encoding="utf-8") as file:

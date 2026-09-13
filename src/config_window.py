@@ -90,6 +90,13 @@ class ConfigWindow:
         display.pack(side="left")
         self.entries["display_seconds"] = display
 
+        self.continuous_scroll_var = tk.BooleanVar(value=self.config.get("continuous_scroll", False))
+        ttk.Checkbutton(
+            container,
+            text="Scroll all symbols continuously in one line",
+            variable=self.continuous_scroll_var,
+        ).pack(anchor="w", pady=(6, 0))
+
         actions = ttk.Frame(container)
         actions.pack(fill="x", pady=(16, 0))
         ttk.Button(actions, text="Save", command=self._save).pack(side="right")
@@ -165,6 +172,7 @@ class ConfigWindow:
             "bg_closed": get_hex("bg_closed"),
             "scroll_speed_ms": scroll_speed_ms,
             "display_seconds": display_seconds,
+            "continuous_scroll": bool(self.continuous_scroll_var.get()),
         }
 
     def show(self):
