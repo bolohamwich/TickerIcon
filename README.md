@@ -4,7 +4,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/bolohamwich/TickerIcon)](https://github.com/bolohamwich/TickerIcon/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/bolohamwich/TickerIcon)](LICENSE)
 
-A lightweight, open-source Python application that embeds a live, automatically updating stock ticker directly into Windows system tray. 
+A lightweight, open-source Windows application that embeds a live, automatically updating stock ticker directly into the system tray. 
 Relies on Yahoo Finance for 1-minute updates during regular, pre-market, and after-hours trading sessions.
 
 ## Features
@@ -14,34 +14,53 @@ Relies on Yahoo Finance for 1-minute updates during regular, pre-market, and aft
 * **Updates:** Use the tray menu's **Check for Updates** command to download and launch the latest installer.
 
 ## Prerequisites
-* Python 3.9 (or newer)
 * Windows 10 or 11
 
 ## Installation
 
-1. Clone or download this repository.
-2. Open your terminal or command prompt in the folder directory.
-3. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Download `TickerIcon-Setup.exe` from the [latest release](https://github.com/bolohamwich/TickerIcon/releases/latest).
+2. Run the installer and follow the setup prompts.
+3. Launch TickerIcon from the Start Menu.
+
+If you prefer a portable copy, each release also includes `TickerIcon.zip`.
 
 ## Usage
 
-Start `main.pyw` to launch the application. Because it uses the `.pyw` extension, it will run silently in the background without opening a command prompt window. 
+Launch TickerIcon from the Start Menu or by opening the installed application directly. It runs silently in the background without opening a command prompt window. 
 
 *Note: Windows hides new tray icons in the overflow menu by default. Click the up-arrow `^` on your taskbar and drag the new stock icon down to the visible portion of your taskbar so it is always visible.*
 
-### Changing the Stock Symbols
+### Tray Icon Menu
 
+Right-click the tray icon to open the context menu:
+
+* **Settings** opens the configuration window.
+* **Pause** temporarily stops price updates and switches the tray icon to a paused state until you unpause it.
+* **Check for Updates** downloads the latest installer from GitHub Releases and starts the upgrade process for you.
+* **Quit** closes the application.
+
+### Settings
+
+The **Settings** window lets you update:
+
+* the list of tracked ticker symbols (up to ten symbols)
+* positive, negative, error-border, and market-state colors
+* scroll speed
+* how long each price stays visible
+* whether all tracked symbols scroll continuously in one line
+
+After you save your changes, TickerIcon reloads the configuration automatically.
+
+### Updates
+
+Use **Check for Updates** from the tray icon menu to look for a newer release. When an update is available, TickerIcon downloads the latest `TickerIcon-Setup.exe`, launches it, and exits so you can complete the installer. Reinstalling with a newer installer upgrades the app in place and keeps your existing `config.cfg`.
 
 ## Running on Startup
-1. Press `Win + R` to open the Run dialog.
-2. Type `shell:startup` and press Enter.
-3. Right-click inside the folder, select **New > Shortcut**.
-4. Browse to your `main.pyw` file and complete the wizard.
+Choose **Start TickerIcon when I sign in to Windows** during installation if you want it to launch automatically at sign-in. If you skipped that option, run the latest installer again and enable the startup option.
 
 ## Building a Windows Package
+
+Python is only required when running the project from source or building release artifacts.
 
 Build the application on Windows because PyInstaller produces a
 platform-specific executable:
