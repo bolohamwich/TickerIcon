@@ -27,7 +27,7 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           $version = $env:RELEASE_TAG -replace '^[vV]', ''
-          (Get-Content src/version.py) -replace 'APP_VERSION = ".*"', ('APP_VERSION = "' + $version + '"') | Set-Content src/version.py
+          (Get-Content src/version.py) -replace 'APP_VERSION = ".*"', ('APP_VERSION = "' + $version + '"') | Set-Content -Encoding utf8 src/version.py
 
       - name: Build executable
         run: pyinstaller tickericon.spec

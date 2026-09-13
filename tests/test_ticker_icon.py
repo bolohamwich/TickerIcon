@@ -1,6 +1,7 @@
 import threading
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -52,6 +53,58 @@ def test_on_quit_stops_running_and_the_tray_icon(app):
 
     assert app.running is False
     mock_icon.stop.assert_called_once()
+
+
+def test_on_check_for_updates_starts_only_one_worker(app):
+    menu_item = MagicMock()
+    worker = MagicMock()
+
+    with patch("src.ticker_icon.threading.Thread", return_value=worker) as thread:
+        app.on_check_for_updates(app.tray_icon, menu_item)
+        app.on_check_for_updates(app.tray_icon, menu_item)
+
+    assert app.update_in_progress is True
+    assert menu_item.enabled is False
+    app.tray_icon.update_menu.assert_called_once()
+    thread.assert_called_once_with(target=app._check_for_updates, daemon=True)
+    worker.start.assert_called_once()
+
+
+def test_check_for_updates_launches_new_installer_and_resets_guard(app):
+    release = MagicMock(version="1.1.0")
+    installer_path = Path("TickerIcon-Setup.exe")
+    app.running = True
+    app.update_in_progress = True
+    app.update_menu_item = MagicMock()
+    app.update_checker = MagicMock()
+    app.update_checker.check.return_value = release
+    app.update_checker.download_installer.return_value = installer_path
+
+    app._check_for_updates()
+
+    app.update_checker.download_installer.assert_called_once_with(release)
+    app.update_checker.launch_installer.assert_called_once_with(installer_path)
+    assert app.running is False
+    assert app.update_in_progress is False
+    assert app.update_menu_item.enabled is True
+    app.tray_icon.stop.assert_called_once()
+    app.tray_icon.update_menu.assert_called_once()
+
+
+def test_check_for_updates_notifies_and_resets_guard_on_failure(app):
+    app.update_in_progress = True
+    app.update_menu_item = MagicMock()
+    app.update_checker = MagicMock()
+    app.update_checker.check.side_effect = RuntimeError("network unavailable")
+
+    app._check_for_updates()
+
+    app.tray_icon.notify.assert_called_once_with(
+        "Update failed: network unavailable", "TickerIcon"
+    )
+    assert app.update_in_progress is False
+    assert app.update_menu_item.enabled is True
+    app.tray_icon.update_menu.assert_called_once()
 
 
 class TestInterruptibleSleep:

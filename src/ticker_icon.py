@@ -45,14 +45,20 @@ class TickerIcon:
         self.running = False
         self.tray_icon = None
         self.update_checker = UpdateChecker()
+        self.update_lock = threading.Lock()
+        self.update_in_progress = False
+        self.update_menu_item = None
 
     def start(self):
         """Initializes and runs the system tray application."""
         self.running = True
 
         # Setup right-click menu
+        self.update_menu_item = pystray.MenuItem(
+            'Check for Updates', self.on_check_for_updates
+        )
         menu = pystray.Menu(
-            pystray.MenuItem('Check for Updates', self.on_check_for_updates),
+            self.update_menu_item,
             pystray.MenuItem('Quit', self.on_quit),
         )
 
@@ -86,6 +92,13 @@ class TickerIcon:
 
     def on_check_for_updates(self, icon, menu_item):
         """Checks for updates in the background so the tray menu stays responsive."""
+        with self.update_lock:
+            if self.update_in_progress:
+                return
+            self.update_in_progress = True
+
+        menu_item.enabled = False
+        icon.update_menu()
         threading.Thread(target=self._check_for_updates, daemon=True).start()
 
     def _check_for_updates(self):
@@ -103,6 +116,13 @@ class TickerIcon:
                 self.tray_icon.stop()
         except Exception as error:
             self._notify(f"Update failed: {error}")
+        finally:
+            with self.update_lock:
+                self.update_in_progress = False
+            if self.update_menu_item is not None:
+                self.update_menu_item.enabled = True
+            if self.tray_icon is not None:
+                self.tray_icon.update_menu()
 
     def _notify(self, message: str):
         if self.tray_icon is not None:
