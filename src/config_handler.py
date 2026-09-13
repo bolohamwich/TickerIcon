@@ -100,7 +100,7 @@ class ConfigHandler:
             bg_closed=self._hex_to_rgb(section["COLOR_CLOSED"]),
             scroll_speed_ms=scroll_speed_ms,
             display_seconds=display_seconds,
-            continuous_scroll=section.getboolean("CONTINUOUS_SCROLL", fallback=False),
+            continuous_scroll=section.getboolean("CONTINUOUS_SCROLL", fallback=True),
         )
 
     def save(self, config: AppConfig):
@@ -151,7 +151,7 @@ class ConfigHandler:
             f"DISPLAY_SECONDS={display_seconds}",
             "",
             "# Scroll every tracked symbol continuously in one line instead of one at a time",
-            f"CONTINUOUS_SCROLL={'true' if config.get('continuous_scroll', False) else 'false'}",
+            f"CONTINUOUS_SCROLL={'true' if config.get('continuous_scroll', True) else 'false'}",
         ]
 
         with open(self.config_path, "w", encoding="utf-8") as file:

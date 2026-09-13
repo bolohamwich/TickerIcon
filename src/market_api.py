@@ -83,14 +83,22 @@ class MarketAPI:
         data = StockData(symbol=symbol)
         try:
             ticker = yf.Ticker(symbol)
-            todays_data = ticker.history(period='1d', prepost=True)
+            # 1m bars: daily bars ignore prepost, hiding extended-hours moves
+            todays_data = ticker.history(period='1d', interval='1m', prepost=True)
 
             if todays_data.empty:
                 data.has_error = True
                 return data
 
             data.price = todays_data['Close'].iloc[-1]
-            prev_close = ticker.fast_info['previous_close']
+            # Prefer Yahoo's quoted previous close; fast_info['previous_close'] is
+            # derived from daily bars and drifts around session boundaries/weekends.
+            try:
+                prev_close = ticker.fast_info['regular_market_previous_close']
+            except (KeyError, TypeError):
+                prev_close = None
+            if not prev_close:
+                prev_close = ticker.fast_info['previous_close']
             data.change_pct = ((data.price - prev_close) / prev_close) * 100
 
             # Attempt to fetch high/low via fast_info, fallback to history dataframe

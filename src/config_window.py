@@ -90,7 +90,7 @@ class ConfigWindow:
         display.pack(side="left")
         self.entries["display_seconds"] = display
 
-        self.continuous_scroll_var = tk.BooleanVar(value=self.config.get("continuous_scroll", False))
+        self.continuous_scroll_var = tk.BooleanVar(value=self.config.get("continuous_scroll", True))
         ttk.Checkbutton(
             container,
             text="Scroll all symbols continuously in one line",

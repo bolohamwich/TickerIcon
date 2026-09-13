@@ -41,8 +41,18 @@ def test_load_parses_tickers_and_colors(config_file):
     assert config["continuous_scroll"] is True
 
 
-def test_load_defaults_continuous_scroll_to_false_when_missing(tmp_path):
+def test_load_defaults_continuous_scroll_to_true_when_missing(tmp_path):
     content = CONFIG_CONTENT.replace("CONTINUOUS_SCROLL=true\n", "")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["continuous_scroll"] is True
+
+
+def test_load_parses_continuous_scroll_false(tmp_path):
+    content = CONFIG_CONTENT.replace("CONTINUOUS_SCROLL=true", "CONTINUOUS_SCROLL=false")
     path = tmp_path / "config.cfg"
     path.write_text(content)
 
