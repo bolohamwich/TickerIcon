@@ -320,3 +320,79 @@ class TestFetchLoopPause:
             app._fetch_loop()
 
         app.api.fetch_all.assert_not_called()
+
+
+class TestDisplayContinuousLap:
+    def test_builds_strip_and_renders_until_width_reached(self, app):
+        app.running = True
+        app.continuous_gen = MagicMock()
+        app.continuous_gen.width = 40
+        app.continuous_gen.render_frame.return_value = "frame"
+        app.continuous_gen.symbol_at.return_value = None
+
+        with patch("src.ticker_icon.time.sleep"), \
+                patch.object(app, "_continuous_pixels_per_frame", return_value=20):
+            app._display_continuous_lap()
+
+        app.continuous_gen.build.assert_called_once()
+        assert app.tray_icon.icon == "frame"
+        assert app.continuous_gen.render_frame.call_count == 2
+
+    def test_updates_tooltip_when_new_symbol_enters_view(self, app):
+        app.running = True
+        data_amd = StockData(symbol="AMD", change_pct=1.0, state="open")
+        app.continuous_gen = MagicMock()
+        app.continuous_gen.width = 10
+        app.continuous_gen.render_frame.return_value = "frame"
+        app.continuous_gen.symbol_at.return_value = data_amd
+
+        with patch("src.ticker_icon.time.sleep"), \
+                patch.object(app, "_continuous_pixels_per_frame", return_value=10):
+            app._display_continuous_lap()
+
+        assert "AMD" in app.tray_icon.title
+
+    def test_stops_immediately_when_paused_mid_lap(self, app):
+        app.running = True
+        app.paused.set()
+        app.continuous_gen = MagicMock()
+        app.continuous_gen.width = 1000
+
+        with patch("src.ticker_icon.time.sleep"), \
+                patch.object(app, "_continuous_pixels_per_frame", return_value=1):
+            app._display_continuous_lap()
+
+        app.continuous_gen.render_frame.assert_not_called()
+
+    def test_sleeps_when_no_symbols_configured(self, app):
+        app.config["tickers"] = []
+
+        with patch.object(app, "_interruptible_sleep") as mock_sleep:
+            app._display_continuous_lap()
+
+        mock_sleep.assert_called_once_with(0.25)
+
+
+class TestContinuousPixelsPerFrame:
+    def test_returns_at_least_one(self, app):
+        assert app._continuous_pixels_per_frame(100000) >= 1
+
+    def test_faster_speed_yields_more_pixels_per_frame(self, app):
+        slow = app._continuous_pixels_per_frame(1000)
+        fast = app._continuous_pixels_per_frame(100)
+        assert fast > slow
+
+
+class TestDisplayLoopContinuousRouting:
+    def test_routes_to_continuous_lap_when_enabled(self, app):
+        app.running = True
+        app.data_ready.set()
+        app.config["continuous_scroll"] = True
+
+        def stop_after_lap():
+            app.running = False
+
+        with patch.object(app, "_display_continuous_lap", side_effect=stop_after_lap) as lap:
+            app._display_loop()
+
+        lap.assert_called_once()

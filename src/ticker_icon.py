@@ -8,6 +8,7 @@ import pystray
 
 from src.market_api import MarketAPI, StockData
 from src.icon_generator import IconGenerator
+from src.continuous_scroll import ContinuousScrollGenerator
 from src.config_handler import ConfigHandler
 from src.config_window import ConfigWindow
 from src.updater import UpdateChecker
@@ -32,6 +33,7 @@ class TickerIcon:
         self.config = ConfigHandler(config_path).load()
         self.api = MarketAPI(self.config['tickers'])
         self.icon_gen = IconGenerator(self.config)
+        self.continuous_gen = ContinuousScrollGenerator(self.icon_gen)
         self.display_thread = None
 
         # Latest fetched data per symbol, shared between the fetch and display
@@ -142,6 +144,7 @@ class TickerIcon:
             self.config = config
             self.api = MarketAPI(self.config['tickers'])
             self.icon_gen = IconGenerator(self.config)
+            self.continuous_gen = ContinuousScrollGenerator(self.icon_gen)
             self.snapshot = {
                 symbol: StockData(symbol=symbol) for symbol in self.config['tickers']
             }
@@ -237,6 +240,15 @@ class TickerIcon:
                 continue
 
             with self.lock:
+                continuous_scroll = self.config['continuous_scroll']
+
+            if continuous_scroll:
+                self._display_continuous_lap()
+                if not self.running:
+                    return
+                continue
+
+            with self.lock:
                 symbols = list(self.config['tickers'])
                 display_seconds = self.config['display_seconds']
                 scroll_speed_ms = self.config['scroll_speed_ms']
@@ -253,7 +265,7 @@ class TickerIcon:
 
                 with self.lock:
                     current_symbols = list(self.config['tickers'])
-                    if current_symbols != symbols:
+                    if current_symbols != symbols or self.config['continuous_scroll']:
                         break
                     data = self.snapshot.get(symbol, StockData(symbol=symbol))
                     display_seconds = self.config['display_seconds']
@@ -271,6 +283,60 @@ class TickerIcon:
 
             if not self.running:
                 return
+
+    def _display_continuous_lap(self):
+        """
+        Runs one full pass of the continuous-scroll strip, built from the
+        ticker list/snapshot captured at the start of the lap so a fetch
+        that completes mid-lap never causes a visible rewind or reset.
+
+        Returns:
+            None: Frames are rendered directly onto the tray icon until the
+                strip has fully scrolled past, or the app stops/pauses.
+        """
+        with self.lock:
+            symbols = list(self.config['tickers'])
+            scroll_speed_ms = self.config['scroll_speed_ms']
+            snapshot = dict(self.snapshot)
+            continuous_gen = self.continuous_gen
+
+        if not symbols:
+            self._interruptible_sleep(0.25)
+            return
+
+        continuous_gen.build(symbols, snapshot)
+        pixels_per_frame = self._continuous_pixels_per_frame(scroll_speed_ms)
+
+        offset = 0
+        last_symbol = None
+        while offset < continuous_gen.width:
+            if not self.running or self.paused.is_set():
+                return
+
+            data = continuous_gen.symbol_at(offset)
+            if data is not None and data.symbol != last_symbol:
+                self._update_tooltip(data)
+                last_symbol = data.symbol
+
+            self.tray_icon.icon = continuous_gen.render_frame(offset)
+            time.sleep(SCROLL_FRAME_INTERVAL_S)
+            offset += pixels_per_frame
+
+    def _continuous_pixels_per_frame(self, scroll_speed_ms: float) -> int:
+        """
+        Converts the configured per-character scroll speed into a pixel
+        step for the continuous-scroll strip's animation frame cadence.
+
+        Args:
+            scroll_speed_ms (float): Configured milliseconds-per-character scroll speed.
+
+        Returns:
+            int: Pixels to advance the strip offset on each animation frame (at least 1).
+        """
+        avg_char_width = max(self.icon_gen.measure_text_width("0123456789") / 10, 1)
+        chars_per_second = 1000.0 / scroll_speed_ms
+        pixels_per_second = chars_per_second * avg_char_width
+        return max(1, round(pixels_per_second * SCROLL_FRAME_INTERVAL_S))
 
     def _scroll_symbol(self, symbol: str, state: str, scroll_speed_ms: float = None):
         """
@@ -311,17 +377,40 @@ class TickerIcon:
         self.tray_icon.icon = self.icon_gen.generate_value_frame(
             data.change_pct, data.state, has_error=data.has_error
         )
+        self._update_tooltip(data)
 
+    def _update_tooltip(self, data: StockData):
+        """
+        Refreshes only the tray tooltip for a ticker, without touching the icon image.
+
+        Args:
+            data (StockData): The ticker snapshot to describe in the tooltip.
+
+        Returns:
+            None: The tray icon's title is updated in place.
+        """
+        self.tray_icon.title = self._build_tooltip(data)
+
+    @staticmethod
+    def _build_tooltip(data: StockData) -> str:
+        """
+        Formats a ticker's tooltip text.
+
+        Args:
+            data (StockData): The ticker snapshot to describe.
+
+        Returns:
+            str: The multi-line tooltip text for the tray icon.
+        """
         state_formatted = data.state.replace("_", " ").title()
         err_indicator = " [Update Failed]" if data.has_error else ""
         market_part = f" - {data.exchange}" if data.exchange else ""
 
-        tooltip = (
+        return (
             f"{data.symbol}{market_part} ({state_formatted}){err_indicator}\n"
             f"Price: ${data.price:.2f} ({data.change_pct:+.2f}%)\n"
             f"High: ${data.day_high:.2f} | Low: ${data.day_low:.2f}"
         )
-        self.tray_icon.title = tooltip
 
     def _interruptible_sleep(self, seconds: float):
         """

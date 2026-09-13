@@ -37,6 +37,17 @@ class FakeWidget:
         return None
 
 
+class FakeBooleanVar:
+    def __init__(self, value=False):
+        self._value = bool(value)
+
+    def get(self):
+        return self._value
+
+    def set(self, value):
+        self._value = bool(value)
+
+
 class FakeRoot:
     def __init__(self):
         self.title_text = None
@@ -69,6 +80,7 @@ class FakeTtkModule:
     Label = FakeWidget
     Button = FakeWidget
     Separator = FakeWidget
+    Checkbutton = FakeWidget
 
 
 class FakeTkModule:
@@ -79,6 +91,9 @@ class FakeTkModule:
 
     def Tk(self):
         return self.root
+
+    def BooleanVar(self, value=False):
+        return FakeBooleanVar(value)
 
 
 def test_rgb_to_hex_round_trip():
@@ -118,6 +133,7 @@ def test_config_window_collects_valid_config(monkeypatch):
     window.entries["bg_closed"].value = "#131415"
     window.entries["scroll_speed_ms"].value = "320"
     window.entries["display_seconds"].value = "7.5"
+    window.continuous_scroll_var.set(True)
 
     collected = window._collect_config()
 
@@ -126,6 +142,7 @@ def test_config_window_collects_valid_config(monkeypatch):
     assert collected["display_seconds"] == 7.5
     assert collected["color_positive"] == (1, 2, 3)
     assert collected["bg_closed"] == (19, 20, 21)
+    assert collected["continuous_scroll"] is True
 
 
 def test_config_window_save_writes_file_and_calls_callback(tmp_path, monkeypatch):
@@ -159,6 +176,7 @@ def test_config_window_save_writes_file_and_calls_callback(tmp_path, monkeypatch
     window.entries["bg_closed"].value = "#131415"
     window.entries["scroll_speed_ms"].value = "180"
     window.entries["display_seconds"].value = "3.5"
+    window.continuous_scroll_var.set(True)
 
     callback_calls = []
     window.on_save = callback_calls.append
@@ -170,6 +188,7 @@ def test_config_window_save_writes_file_and_calls_callback(tmp_path, monkeypatch
     assert saved["tickers"] == ["AAPL"]
     assert saved["scroll_speed_ms"] == 180
     assert saved["display_seconds"] == 3.5
+    assert saved["continuous_scroll"] is True
 
 
 def test_config_window_rejects_invalid_positive_values(monkeypatch):
