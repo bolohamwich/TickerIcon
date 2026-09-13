@@ -316,7 +316,7 @@ class TestFetchLoopPause:
         def stop_after_delay(*_args):
             app.running = False
 
-        with patch.object(app, "_interruptible_sleep", side_effect=stop_after_delay):
+        with patch.object(app, "_wait_while_paused", side_effect=stop_after_delay):
             app._fetch_loop()
 
         app.api.fetch_all.assert_not_called()
