@@ -59,6 +59,35 @@ class TestBuild:
 
         assert generator.width == ICON_SIZE + generator.icon_gen.measure_text_width("MSFT +0.00%")
 
+    def test_gap_keeps_previous_segments_state_color(self, generator, snapshot, config):
+        generator.build(["AMD", "AAPL"], snapshot)
+
+        # Gap before AAPL follows the AMD (open) segment, so it stays open-colored.
+        gap_before_aapl = ICON_SIZE + generator.icon_gen.measure_text_width("AMD +5.14%")
+        frame = generator.render_frame(gap_before_aapl)
+
+        assert frame.getpixel((0, 0)) == config["bg_open"]
+
+    def test_leading_gap_wraps_to_last_segments_state_color(self, generator, snapshot, config):
+        generator.build(["AMD", "AAPL"], snapshot)
+
+        # First gap follows the wrapped-around AAPL (closed) segment.
+        frame = generator.render_frame(0)
+
+        assert frame.getpixel((0, 0)) == config["bg_closed"]
+
+    def test_background_never_changes_when_all_symbols_share_a_state(self, generator, config):
+        snapshot = {
+            "AMD": StockData(symbol="AMD", change_pct=1.0, state="premarket"),
+            "AAPL": StockData(symbol="AAPL", change_pct=-1.0, state="premarket"),
+        }
+        generator.build(["AMD", "AAPL"], snapshot)
+
+        for offset in range(0, generator.width, ICON_SIZE // 2):
+            frame = generator.render_frame(offset)
+            assert frame.getpixel((0, 0)) == config["bg_premarket"]
+            assert frame.getpixel((0, ICON_SIZE - 1)) == config["bg_premarket"]
+
 
 class TestRenderFrame:
     def test_returns_64x64_image(self, generator, snapshot):

@@ -196,6 +196,47 @@ class TestFetchOne:
 
         assert data.change_pct == pytest.approx(2.0)
 
+    def test_premarket_change_is_measured_against_last_regular_close(self):
+        api = MarketAPI(["AMD"])
+        now = datetime.now(ZoneInfo("UTC"))
+
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame({"Close": [94.0], "High": [95.0], "Low": [93.0]})
+        mock_ticker.fast_info = {
+            # In premarket this is the close from two sessions back; must be ignored
+            "regular_market_previous_close": 90.0,
+            "previous_close": 90.0,
+            "day_high": 95.0,
+            "day_low": 93.0,
+        }
+        mock_ticker.history_metadata = {
+            "regularMarketPrice": 100.0,
+            "currentTradingPeriod": _trading_period(now, (-30, 30), (60, 120), (150, 180)),
+        }
+
+        with patch("src.market_api.yf.Ticker", return_value=mock_ticker):
+            data = api._fetch_one("AMD")
+
+        assert data.state == "premarket"
+        assert data.change_pct == pytest.approx(-6.0)
+
+    def test_premarket_falls_back_to_fast_info_when_metadata_price_missing(self):
+        api = MarketAPI(["AMD"])
+        now = datetime.now(ZoneInfo("UTC"))
+
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame({"Close": [102.0], "High": [103.0], "Low": [99.0]})
+        mock_ticker.fast_info = {"regular_market_previous_close": 100.0, "day_high": 103.0, "day_low": 99.0}
+        mock_ticker.history_metadata = {
+            "currentTradingPeriod": _trading_period(now, (-30, 30), (60, 120), (150, 180)),
+        }
+
+        with patch("src.market_api.yf.Ticker", return_value=mock_ticker):
+            data = api._fetch_one("AMD")
+
+        assert data.state == "premarket"
+        assert data.change_pct == pytest.approx(2.0)
+
     def test_falls_back_to_history_high_low_when_fast_info_missing_them(self):
         api = MarketAPI(["AMD"])
 

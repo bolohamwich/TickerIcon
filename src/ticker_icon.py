@@ -279,7 +279,17 @@ class TickerIcon:
                 continue
 
             with self.lock:
+                symbols = list(self.config['tickers'])
                 continuous_scroll = self.config['continuous_scroll']
+
+            # With a single symbol the name scroll is just noise: the tooltip
+            # already identifies it, so keep the value on screen permanently.
+            if len(symbols) == 1:
+                with self.lock:
+                    data = self.snapshot.get(symbols[0], StockData(symbol=symbols[0]))
+                self._show_value(data)
+                self._interruptible_sleep(1.0)
+                continue
 
             if continuous_scroll:
                 self._display_continuous_lap()
@@ -288,7 +298,6 @@ class TickerIcon:
                 continue
 
             with self.lock:
-                symbols = list(self.config['tickers'])
                 display_seconds = self.config['display_seconds']
                 scroll_speed_ms = self.config['scroll_speed_ms']
 
@@ -304,7 +313,8 @@ class TickerIcon:
 
                 with self.lock:
                     current_symbols = list(self.config['tickers'])
-                    if current_symbols != symbols or self.config['continuous_scroll']:
+                    if (current_symbols != symbols or self.config['continuous_scroll']
+                            or len(current_symbols) == 1):
                         break
                     data = self.snapshot.get(symbol, StockData(symbol=symbol))
                     display_seconds = self.config['display_seconds']
