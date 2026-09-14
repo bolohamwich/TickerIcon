@@ -384,6 +384,41 @@ class TestDisplayLoop:
         assert app.tray_icon.title == "TickerIcon (Paused)"
 
 
+class TestDisplayLoopSingleSymbol:
+    def test_shows_value_without_scrolling_the_name(self, app):
+        app.config["tickers"] = ["AMD"]
+        app._scroll_symbol = MagicMock()
+        app._show_value = MagicMock()
+        app.running = True
+        app.data_ready.set()
+
+        def stop(_seconds):
+            app.running = False
+
+        with patch.object(app, "_interruptible_sleep", side_effect=stop):
+            app._display_loop()
+
+        app._scroll_symbol.assert_not_called()
+        app._show_value.assert_called_once()
+
+    def test_stays_static_even_in_continuous_scroll_mode(self, app):
+        app.config["tickers"] = ["AMD"]
+        app.config["continuous_scroll"] = True
+        app._show_value = MagicMock()
+        app.running = True
+        app.data_ready.set()
+
+        def stop(_seconds):
+            app.running = False
+
+        with patch.object(app, "_display_continuous_lap") as lap, \
+                patch.object(app, "_interruptible_sleep", side_effect=stop):
+            app._display_loop()
+
+        lap.assert_not_called()
+        app._show_value.assert_called_once()
+
+
 class TestFetchLoopPause:
     def test_skips_fetching_while_paused(self, app):
         app.running = True

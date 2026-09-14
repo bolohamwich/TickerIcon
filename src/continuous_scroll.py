@@ -62,6 +62,10 @@ class ContinuousScrollGenerator:
         """
         entries = [(symbol, snapshot.get(symbol, StockData(symbol=symbol))) for symbol in symbols]
         segment_images = [(symbol, data, self._render_segment(symbol, data)) for symbol, data in entries]
+        segment_colors = [
+            self.icon_gen.bg_colors.get(data.state, self.icon_gen.bg_colors['closed'])
+            for _, data in entries
+        ]
 
         total_width = max(
             sum(img.width for _, _, img in segment_images) + ICON_SIZE * len(segment_images),
@@ -69,9 +73,14 @@ class ContinuousScrollGenerator:
         )
 
         strip = Image.new('RGB', (total_width, ICON_SIZE), color=self.icon_gen.bg_colors['closed'])
+        draw = ImageDraw.Draw(strip)
         segments = []
         x = 0
-        for symbol, data, img in segment_images:
+        for i, (symbol, data, img) in enumerate(segment_images):
+            # Keep the previous symbol's state color across the gap (wrapping),
+            # so the background only changes when a new state scrolls in.
+            gap_color = segment_colors[i - 1]
+            draw.rectangle([(x, 0), (x + ICON_SIZE - 1, ICON_SIZE - 1)], fill=gap_color)
             x += ICON_SIZE  # leading gap, full icon width, keeps symbols visually separated
             start = x
             strip.paste(img, (x, 0))

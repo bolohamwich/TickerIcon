@@ -91,14 +91,16 @@ class MarketAPI:
                 return data
 
             data.price = todays_data['Close'].iloc[-1]
-            # Prefer Yahoo's quoted previous close; fast_info['previous_close'] is
-            # derived from daily bars and drifts around session boundaries/weekends.
-            try:
-                prev_close = ticker.fast_info['regular_market_previous_close']
-            except (KeyError, TypeError):
-                prev_close = None
-            if not prev_close:
-                prev_close = ticker.fast_info['previous_close']
+
+            metadata = ticker.history_metadata
+            data.exchange = _EXCHANGE_NAMES.get(
+                metadata.get('exchangeName', ''),
+                metadata.get('fullExchangeName', symbol),
+            )
+            data.state = self._resolve_state(metadata)
+            data.next_open = self._resolve_next_open(metadata)
+
+            prev_close = self._resolve_previous_close(ticker, metadata, data.state)
             data.change_pct = ((data.price - prev_close) / prev_close) * 100
 
             # Attempt to fetch high/low via fast_info, fallback to history dataframe
@@ -109,18 +111,44 @@ class MarketAPI:
                 data.day_high = todays_data['High'].max()
                 data.day_low = todays_data['Low'].min()
 
-            metadata = ticker.history_metadata
-            data.exchange = _EXCHANGE_NAMES.get(
-                metadata.get('exchangeName', ''),
-                metadata.get('fullExchangeName', symbol),
-            )
-            data.state = self._resolve_state(metadata)
-            data.next_open = self._resolve_next_open(metadata)
-
         except Exception:
             data.has_error = True
 
         return data
+
+    @staticmethod
+    def _resolve_previous_close(ticker, metadata: dict, state: str) -> float:
+        """
+        Resolves the baseline close for the change percentage.
+
+        During premarket, Yahoo's "regular market" fields still describe the
+        previous day's session, so regular_market_previous_close is the close
+        from two sessions back. The metadata's regularMarketPrice is the last
+        regular close then (the session hasn't traded yet) - the baseline that
+        matches the premarket change Yahoo itself displays.
+
+        Args:
+            ticker (yf.Ticker): The ticker being fetched.
+            metadata (dict): Ticker.history_metadata for the symbol.
+            state (str): The already-resolved market state for the symbol.
+
+        Returns:
+            float: The previous close to compute the change percentage against.
+        """
+        if state == 'premarket':
+            last_close = metadata.get('regularMarketPrice')
+            if last_close:
+                return last_close
+
+        # Prefer Yahoo's quoted previous close; fast_info['previous_close'] is
+        # derived from daily bars and drifts around session boundaries/weekends.
+        try:
+            prev_close = ticker.fast_info['regular_market_previous_close']
+        except (KeyError, TypeError):
+            prev_close = None
+        if not prev_close:
+            prev_close = ticker.fast_info['previous_close']
+        return prev_close
 
     @staticmethod
     def _resolve_state(metadata: dict) -> str:
