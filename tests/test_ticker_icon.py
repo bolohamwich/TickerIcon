@@ -250,6 +250,15 @@ class TestScrollSymbol:
 
         mock_sleep.assert_not_called()
 
+    def test_passes_has_error_to_scroll_frame(self, app):
+        app.running = True
+        app.icon_gen.generate_scroll_frame = MagicMock(return_value=app.icon_gen.generate_loading_frame())
+
+        with patch("src.ticker_icon.time.sleep"):
+            app._scroll_symbol("AMD", "open", scroll_speed_ms=50, has_error=True)
+
+        assert app.icon_gen.generate_scroll_frame.call_args.kwargs["has_error"] is True
+
 
 class TestFetchLoop:
     def test_updates_snapshot_from_the_api(self, app):

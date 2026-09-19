@@ -141,6 +141,10 @@ class TestGenerateScrollFrame:
         image = icon_gen.generate_scroll_frame("AMD", "some_unknown_state", offset=0)
         assert image.getpixel((0, 63)) == config["bg_closed"]
 
+    def test_bottom_strip_uses_error_color_when_has_error(self, icon_gen, config):
+        image = icon_gen.generate_scroll_frame("AMD", "premarket", offset=0, has_error=True)
+        assert image.getpixel((0, 63)) == config["color_error_border"]
+
 
 class TestMeasureTextWidth:
     def test_returns_positive_width_for_nonempty_text(self, icon_gen):

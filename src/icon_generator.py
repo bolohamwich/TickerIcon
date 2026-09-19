@@ -168,7 +168,7 @@ class IconGenerator:
             return self._app_icon.copy()
         return self.generate_loading_frame()
 
-    def generate_scroll_frame(self, symbol: str, state: str, offset: int) -> Image.Image:
+    def generate_scroll_frame(self, symbol: str, state: str, offset: int, has_error: bool = False) -> Image.Image:
         """
         Creates one frame of the right-to-left ticker symbol marquee.
 
@@ -176,6 +176,8 @@ class IconGenerator:
             symbol (str): The ticker symbol being scrolled, e.g. 'AMD'.
             state (str): Current market state, used for the bottom strip color.
             offset (int): Pixels the text has travelled from the right edge.
+            has_error (bool): Whether the last data fetch failed; takes
+                precedence over market state for strip color.
 
         Returns:
             Image.Image: A 64x64 Pillow Image ready for pystray.
@@ -193,7 +195,7 @@ class IconGenerator:
 
         draw.text((x, y), symbol, fill=text_color, font=self.font)
 
-        self.draw_strip(draw, 64, self.strip_color(state))
+        self.draw_strip(draw, 64, self.strip_color(state, has_error))
 
         return img
 
