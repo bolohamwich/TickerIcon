@@ -1,10 +1,18 @@
 import itertools
 import time
 import threading
+import webbrowser
 from datetime import datetime
 from typing import Dict
 from zoneinfo import ZoneInfo
 import pystray
+
+try:
+    import tkinter as tk
+    from tkinter import messagebox
+except ModuleNotFoundError:  # pragma: no cover - only affects headless/non-Windows test environments
+    tk = None
+    messagebox = None
 
 from src.market_api import MarketAPI, StockData
 from src.icon_generator import IconGenerator
@@ -188,20 +196,25 @@ class TickerIcon:
         threading.Thread(target=self._check_for_updates, daemon=True).start()
 
     def _check_for_updates(self):
+        """
+        Checks GitHub for a newer release and, if one exists, asks the user
+        whether to open its download page in the default browser.
+
+        Returns:
+            None: Runs on the update worker thread; always releases the
+                in-progress guard and re-enables the menu item.
+        """
         try:
             release = self.update_checker.check()
             if release is None:
                 self._notify("You are already running the latest version.")
                 return
 
-            self._notify(f"Downloading TickerIcon {release.version}...")
-            installer_path = self.update_checker.download_installer(release)
-            self.update_checker.launch_installer(installer_path)
-            self.running = False
-            if self.tray_icon is not None:
-                self.tray_icon.stop()
+            if self._prompt_open_download_page(release):
+                # new=2 opens a new tab when a browser is already running
+                webbrowser.open(release.download_page_url, new=2)
         except Exception as error:
-            self._notify(f"Update failed: {error}")
+            self._notify(f"Update check failed: {error}")
         finally:
             with self.update_lock:
                 self.update_in_progress = False
@@ -209,6 +222,35 @@ class TickerIcon:
                 self.update_menu_item.enabled = True
             if self.tray_icon is not None:
                 self.tray_icon.update_menu()
+
+    def _prompt_open_download_page(self, release) -> bool:
+        """
+        Shows a standard Yes/No dialog announcing the new version.
+
+        Args:
+            release (ReleaseInfo): The newer release found on GitHub.
+
+        Returns:
+            bool: True if the user chose to open the download page.
+        """
+        if tk is None or messagebox is None:
+            self._notify(
+                f"New version {release.version} available! "
+                f"Download it from {release.download_page_url}"
+            )
+            return False
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)  # tray-triggered dialog has no parent window to raise it
+        try:
+            return bool(messagebox.askyesno(
+                "TickerIcon Update",
+                f"New version {release.version} available!\nOpen the download page?",
+                parent=root,
+            ))
+        finally:
+            root.destroy()
 
     def _notify(self, message: str):
         if self.tray_icon is not None:

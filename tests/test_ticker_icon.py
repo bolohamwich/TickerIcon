@@ -1,7 +1,6 @@
 import threading
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -147,25 +146,58 @@ def test_on_check_for_updates_starts_only_one_worker(app):
     worker.start.assert_called_once()
 
 
-def test_check_for_updates_launches_new_installer_and_resets_guard(app):
-    release = MagicMock(version="1.1.0")
-    installer_path = Path("TickerIcon-Setup.exe")
+def test_check_for_updates_opens_download_page_when_user_accepts(app):
+    release = MagicMock(version="1.1.0", download_page_url="https://github.com/bolohamwich/TickerIcon/releases/tag/v1.1.0")
     app.running = True
     app.update_in_progress = True
     app.update_menu_item = MagicMock()
     app.update_checker = MagicMock()
     app.update_checker.check.return_value = release
-    app.update_checker.download_installer.return_value = installer_path
 
-    app._check_for_updates()
+    with patch.object(app, "_prompt_open_download_page", return_value=True) as prompt, \
+            patch("src.ticker_icon.webbrowser.open") as browser_open:
+        app._check_for_updates()
 
-    app.update_checker.download_installer.assert_called_once_with(release)
-    app.update_checker.launch_installer.assert_called_once_with(installer_path)
-    assert app.running is False
+    prompt.assert_called_once_with(release)
+    browser_open.assert_called_once_with(release.download_page_url, new=2)
+    assert app.running is True
     assert app.update_in_progress is False
     assert app.update_menu_item.enabled is True
-    app.tray_icon.stop.assert_called_once()
+    app.tray_icon.stop.assert_not_called()
     app.tray_icon.update_menu.assert_called_once()
+
+
+def test_check_for_updates_does_not_open_browser_when_user_declines(app):
+    release = MagicMock(version="1.1.0", download_page_url="https://example.test/release")
+    app.update_in_progress = True
+    app.update_menu_item = MagicMock()
+    app.update_checker = MagicMock()
+    app.update_checker.check.return_value = release
+
+    with patch.object(app, "_prompt_open_download_page", return_value=False), \
+            patch("src.ticker_icon.webbrowser.open") as browser_open:
+        app._check_for_updates()
+
+    browser_open.assert_not_called()
+    assert app.update_in_progress is False
+    assert app.update_menu_item.enabled is True
+    app.tray_icon.update_menu.assert_called_once()
+
+
+def test_check_for_updates_notifies_when_already_up_to_date(app):
+    app.update_in_progress = True
+    app.update_menu_item = MagicMock()
+    app.update_checker = MagicMock()
+    app.update_checker.check.return_value = None
+
+    with patch("src.ticker_icon.webbrowser.open") as browser_open:
+        app._check_for_updates()
+
+    app.tray_icon.notify.assert_called_once_with(
+        "You are already running the latest version.", "TickerIcon"
+    )
+    browser_open.assert_not_called()
+    assert app.update_in_progress is False
 
 
 def test_check_for_updates_notifies_and_resets_guard_on_failure(app):
@@ -177,11 +209,73 @@ def test_check_for_updates_notifies_and_resets_guard_on_failure(app):
     app._check_for_updates()
 
     app.tray_icon.notify.assert_called_once_with(
-        "Update failed: network unavailable", "TickerIcon"
+        "Update check failed: network unavailable", "TickerIcon"
     )
     assert app.update_in_progress is False
     assert app.update_menu_item.enabled is True
     app.tray_icon.update_menu.assert_called_once()
+
+
+class TestPromptOpenDownloadPage:
+    def test_returns_true_when_user_clicks_yes(self, app):
+        release = MagicMock(version="1.1.0", download_page_url="https://example.test/release")
+        fake_root = MagicMock()
+        fake_tk = MagicMock()
+        fake_tk.Tk.return_value = fake_root
+        fake_messagebox = MagicMock()
+        fake_messagebox.askyesno.return_value = True
+
+        with patch("src.ticker_icon.tk", fake_tk), \
+                patch("src.ticker_icon.messagebox", fake_messagebox):
+            result = app._prompt_open_download_page(release)
+
+        assert result is True
+        fake_messagebox.askyesno.assert_called_once_with(
+            "TickerIcon Update",
+            "New version 1.1.0 available!\nOpen the download page?",
+            parent=fake_root,
+        )
+        fake_root.withdraw.assert_called_once()
+        fake_root.destroy.assert_called_once()
+
+    def test_returns_false_when_user_clicks_no(self, app):
+        release = MagicMock(version="1.1.0", download_page_url="https://example.test/release")
+        fake_tk = MagicMock()
+        fake_messagebox = MagicMock()
+        fake_messagebox.askyesno.return_value = False
+
+        with patch("src.ticker_icon.tk", fake_tk), \
+                patch("src.ticker_icon.messagebox", fake_messagebox):
+            result = app._prompt_open_download_page(release)
+
+        assert result is False
+
+    def test_destroys_root_even_when_dialog_raises(self, app):
+        release = MagicMock(version="1.1.0", download_page_url="https://example.test/release")
+        fake_root = MagicMock()
+        fake_tk = MagicMock()
+        fake_tk.Tk.return_value = fake_root
+        fake_messagebox = MagicMock()
+        fake_messagebox.askyesno.side_effect = RuntimeError("boom")
+
+        with patch("src.ticker_icon.tk", fake_tk), \
+                patch("src.ticker_icon.messagebox", fake_messagebox), \
+                pytest.raises(RuntimeError):
+            app._prompt_open_download_page(release)
+
+        fake_root.destroy.assert_called_once()
+
+    def test_falls_back_to_notification_without_tkinter(self, app):
+        release = MagicMock(version="1.1.0", download_page_url="https://example.test/release")
+
+        with patch("src.ticker_icon.tk", None), patch("src.ticker_icon.messagebox", None):
+            result = app._prompt_open_download_page(release)
+
+        assert result is False
+        app.tray_icon.notify.assert_called_once_with(
+            "New version 1.1.0 available! Download it from https://example.test/release",
+            "TickerIcon",
+        )
 
 
 class TestInterruptibleSleep:

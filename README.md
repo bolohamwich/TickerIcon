@@ -11,7 +11,7 @@ Relies on Yahoo Finance for 1-minute updates during regular, pre-market, and aft
 * **At-a-glance:** The icon displays the daily percentage change, colored green or red (drops decimals for double-digit moves to ensure taskbar readability), on a static background. A thin strip along the bottom of the icon is color-coded for market state (premarket, open, after hours, closed) and turns to the error color when data can't be fetched — in which case the icon keeps showing the last known values. The strip width is configurable and can be set to 0 to disable it.
 * **Detailed Tooltips:** Hover over the icon to instantly see current price, exact percentage change, day high, and day low.
 * **Sleep:** Automatically suspends network requests overnight and on weekends.
-* **Updates:** Use the tray menu's **Check for Updates** command to download and launch the latest installer.
+* **Updates:** Use the tray menu's **Check for Updates** command to see whether a newer release is available and open its download page.
 
 ## Prerequisites
 * Windows 10 or 11
@@ -36,7 +36,7 @@ Right-click the tray icon to open the context menu:
 
 * **Settings** opens the configuration window.
 * **Pause** temporarily stops price updates and switches the tray icon to a paused state until you unpause it.
-* **Check for Updates** downloads the latest installer from GitHub Releases and starts the upgrade process for you.
+* **Check for Updates** looks for a newer release on GitHub and, if one is found, offers to open its download page in your browser.
 * **Quit** closes the application.
 
 ### Settings
@@ -55,7 +55,7 @@ After you save your changes, TickerIcon reloads the configuration automatically.
 
 ### Updates
 
-Use **Check for Updates** from the tray icon menu to look for a newer release. When an update is available, TickerIcon downloads the latest `TickerIcon-Setup.exe`, launches it, and exits so you can complete the installer. Reinstalling with a newer installer upgrades the app in place and keeps your existing `config.cfg`.
+Use **Check for Updates** from the tray icon menu to look for a newer release. When an update is available, TickerIcon shows a prompt announcing the new version and asking whether to open the download page; choosing **Yes** opens the release page in your default browser (in a new tab if the browser is already running). Download and run the new `TickerIcon-Setup.exe` from there — reinstalling with a newer installer upgrades the app in place and keeps your existing `config.cfg`.
 
 ## Running on Startup
 Choose **Start TickerIcon when I sign in to Windows** during installation if you want it to launch automatically at sign-in. If you skipped that option, run the latest installer again and enable the startup option.

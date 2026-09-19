@@ -1,8 +1,6 @@
 from unittest.mock import patch
 
-import pytest
-
-from src.updater import ReleaseInfo, UpdateChecker
+from src.updater import LATEST_RELEASE_PAGE_URL, ReleaseInfo, UpdateChecker
 
 
 class FakeResponse:
@@ -26,14 +24,11 @@ class FakeResponse:
         return chunk
 
 
-def release_payload(tag_name="v1.1.0", asset_url="https://example.test/TickerIcon-Setup.exe"):
+def release_payload(tag_name="v1.1.0", html_url="https://github.com/bolohamwich/TickerIcon/releases/tag/v1.1.0"):
     return (
         "{"
         f'"tag_name": "{tag_name}", '
-        '"assets": [{'
-        '"name": "TickerIcon-Setup.exe", '
-        f'"browser_download_url": "{asset_url}"'
-        "}]"
+        f'"html_url": "{html_url}"'
         "}"
     ).encode()
 
@@ -45,7 +40,7 @@ def test_check_returns_newer_release():
     with patch("src.updater.urlopen", return_value=response):
         release = checker.check()
 
-    assert release == ReleaseInfo("1.1.0", "https://example.test/TickerIcon-Setup.exe")
+    assert release == ReleaseInfo("1.1.0", "https://github.com/bolohamwich/TickerIcon/releases/tag/v1.1.0")
 
 
 def test_check_returns_none_for_current_release():
@@ -55,25 +50,23 @@ def test_check_returns_none_for_current_release():
         assert checker.check() is None
 
 
-def test_check_rejects_non_https_installer():
-    checker = UpdateChecker()
+def test_check_falls_back_to_latest_page_for_non_https_html_url():
+    checker = UpdateChecker(current_version="1.0.0")
 
     with patch(
         "src.updater.urlopen",
-        return_value=FakeResponse(release_payload(asset_url="http://example.test/setup.exe")),
-    ), pytest.raises(ValueError, match="HTTPS"):
-        checker.check()
+        return_value=FakeResponse(release_payload(html_url="http://example.test/release")),
+    ):
+        release = checker.check()
+
+    assert release == ReleaseInfo("1.1.0", LATEST_RELEASE_PAGE_URL)
 
 
-def test_download_installer_writes_temporary_file(tmp_path):
-    checker = UpdateChecker()
-    release = ReleaseInfo("1.1.0", "https://example.test/TickerIcon-Setup.exe")
+def test_check_falls_back_to_latest_page_when_html_url_missing():
+    checker = UpdateChecker(current_version="1.0.0")
+    payload = b'{"tag_name": "v1.1.0"}'
 
-    with patch("src.updater.urlopen", return_value=FakeResponse(b"installer data")), patch(
-        "src.updater.tempfile.NamedTemporaryFile"
-    ) as named_temporary_file:
-        file_handle = named_temporary_file.return_value.__enter__.return_value
-        file_handle.name = str(tmp_path / "TickerIcon-Setup.exe")
-        checker.download_installer(release)
+    with patch("src.updater.urlopen", return_value=FakeResponse(payload)):
+        release = checker.check()
 
-    file_handle.write.assert_called_once_with(b"installer data")
+    assert release == ReleaseInfo("1.1.0", LATEST_RELEASE_PAGE_URL)
