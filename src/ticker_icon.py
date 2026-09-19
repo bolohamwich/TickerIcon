@@ -212,7 +212,8 @@ class TickerIcon:
 
             if self._prompt_open_download_page(release):
                 # new=2 opens a new tab when a browser is already running
-                webbrowser.open(release.download_page_url, new=2)
+                if not webbrowser.open(release.download_page_url, new=2):
+                    self._notify("Could not open the download page in your default browser.")
         except Exception as error:
             self._notify(f"Update check failed: {error}")
         finally:
