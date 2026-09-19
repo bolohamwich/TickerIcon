@@ -146,7 +146,7 @@ class TickerIcon:
         """
         with self.lock:
             if symbol in self.enabled_symbols:
-                enabled = [s for s in self.config['tickers'] if s in self.enabled_symbols]
+enabled = {s for s in self.config['tickers'] if s in self.enabled_symbols}
                 if len(enabled) <= 1:
                     return
                 self.enabled_symbols.discard(symbol)
