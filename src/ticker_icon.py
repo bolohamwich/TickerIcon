@@ -477,7 +477,7 @@ enabled = {s for s in self.config['tickers'] if s in self.enabled_symbols}
                     return
 
                 # A click during the name scroll advances straight to the next symbol
-                if self._consume_skip():
+if self._consume_skip() or self.display_dirty.is_set():
                     continue
 
                 self._show_value(data)
