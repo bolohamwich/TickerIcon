@@ -6,7 +6,7 @@ except ModuleNotFoundError:  # pragma: no cover - only affects headless/non-Wind
     messagebox = None
     ttk = None
 
-from src.config_handler import ConfigHandler, DEFAULT_FONT_SIZE, MAX_TICKERS
+from src.config_handler import ConfigHandler, DEFAULT_FONT_SIZE, DEFAULT_STRIP_WIDTH, MAX_STRIP_WIDTH, MAX_TICKERS
 
 
 class ConfigWindow:
@@ -32,7 +32,7 @@ class ConfigWindow:
 
         self.root = tk.Tk()
         self.root.title("TickerIcon Settings")
-        self.root.geometry("540x520")
+        self.root.geometry("540x550")
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
 
@@ -56,11 +56,11 @@ class ConfigWindow:
         color_fields = [
             ("Positive", "color_positive"),
             ("Negative", "color_negative"),
-            ("Error border", "color_error_border"),
+            ("Error strip", "color_error_border"),
             ("Open", "bg_open"),
             ("Premarket", "bg_premarket"),
             ("After hours", "bg_after_hours"),
-            ("Closed", "bg_closed"),
+            ("Closed / background", "bg_closed"),
         ]
 
         for label_text, key in color_fields:
@@ -97,6 +97,14 @@ class ConfigWindow:
         font_size.insert(0, str(self.config.get("font_size", DEFAULT_FONT_SIZE)))
         font_size.pack(side="left")
         self.entries["font_size"] = font_size
+
+        row = ttk.Frame(container)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text="Strip width (px)", width=18).pack(side="left")
+        strip_width = ttk.Entry(row, width=12)
+        strip_width.insert(0, str(self.config.get("strip_width", DEFAULT_STRIP_WIDTH)))
+        strip_width.pack(side="left")
+        self.entries["strip_width"] = strip_width
 
         self.continuous_scroll_var = tk.BooleanVar(value=self.config.get("continuous_scroll", True))
         ttk.Checkbutton(
@@ -176,6 +184,13 @@ class ConfigWindow:
         if font_size <= 0:
             raise ValueError("Font size must be positive.")
 
+        try:
+            strip_width = int(self.entries["strip_width"].get())
+        except ValueError as exc:  # pragma: no cover - GUI-side validation
+            raise ValueError("Strip width must be an integer.") from exc
+        if not 0 <= strip_width <= MAX_STRIP_WIDTH:
+            raise ValueError(f"Strip width must be between 0 and {MAX_STRIP_WIDTH}.")
+
         return {
             "tickers": tickers,
             "color_positive": get_hex("color_positive"),
@@ -189,6 +204,7 @@ class ConfigWindow:
             "display_seconds": display_seconds,
             "continuous_scroll": bool(self.continuous_scroll_var.get()),
             "font_size": font_size,
+            "strip_width": strip_width,
         }
 
     def show(self):

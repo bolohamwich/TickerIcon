@@ -250,6 +250,15 @@ class TestScrollSymbol:
 
         mock_sleep.assert_not_called()
 
+    def test_passes_has_error_to_scroll_frame(self, app):
+        app.running = True
+        app.icon_gen.generate_scroll_frame = MagicMock(return_value=app.icon_gen.generate_loading_frame())
+
+        with patch("src.ticker_icon.time.sleep"):
+            app._scroll_symbol("AMD", "open", scroll_speed_ms=50, has_error=True)
+
+        assert app.icon_gen.generate_scroll_frame.call_args.kwargs["has_error"] is True
+
 
 class TestFetchLoop:
     def test_updates_snapshot_from_the_api(self, app):
@@ -257,7 +266,7 @@ class TestFetchLoop:
             symbol: StockData(symbol=symbol, state="open") for symbol in app.config["tickers"]
         }
 
-        def fake_fetch_all():
+        def fake_fetch_all(previous=None):
             app.running = False  # stop the loop after a single iteration
             return fake_snapshot
 
@@ -269,6 +278,23 @@ class TestFetchLoop:
 
         assert app.snapshot == fake_snapshot
 
+    def test_passes_previous_snapshot_to_fetch_all(self, app):
+        received = []
+
+        def fake_fetch_all(previous=None):
+            received.append(previous)
+            app.running = False
+            return dict(previous)
+
+        initial_snapshot = app.snapshot
+        app.api.fetch_all = fake_fetch_all
+        app.running = True
+
+        with patch.object(app, "_sleep_between_fetches"):
+            app._fetch_loop()
+
+        assert received == [initial_snapshot]
+
     def test_sleeps_until_next_open_when_every_market_is_closed(self, app):
         next_open = datetime.now(ZoneInfo("UTC")) + timedelta(hours=2)
         fake_snapshot = {
@@ -276,7 +302,7 @@ class TestFetchLoop:
             for symbol in app.config["tickers"]
         }
 
-        def fake_fetch_all():
+        def fake_fetch_all(previous=None):
             app.running = False
             return fake_snapshot
 
@@ -295,7 +321,7 @@ class TestFetchLoop:
             "AAPL": StockData(symbol="AAPL", state="closed"),
         }
 
-        def fake_fetch_all():
+        def fake_fetch_all(previous=None):
             app.running = False
             return fake_snapshot
 

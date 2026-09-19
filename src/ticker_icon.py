@@ -224,8 +224,10 @@ class TickerIcon:
             with self.lock:
                 api = self.api
                 config_version = self.config
+                previous_snapshot = self.snapshot
 
-            snapshot = api.fetch_all()
+            # Pass the last snapshot so failed fetches keep showing last known values
+            snapshot = api.fetch_all(previous_snapshot)
 
             with self.lock:
                 if api is not self.api or config_version is not self.config:
@@ -321,7 +323,7 @@ class TickerIcon:
                     scroll_speed_ms = self.config['scroll_speed_ms']
 
                 try:
-                    self._scroll_symbol(symbol, data.state, scroll_speed_ms)
+                    self._scroll_symbol(symbol, data.state, scroll_speed_ms, has_error=data.has_error)
                 except TypeError:
                     self._scroll_symbol(symbol, data.state)
                 if not self.running:
@@ -387,7 +389,7 @@ class TickerIcon:
         pixels_per_second = chars_per_second * avg_char_width
         return max(1, round(pixels_per_second * SCROLL_FRAME_INTERVAL_S))
 
-    def _scroll_symbol(self, symbol: str, state: str, scroll_speed_ms: float = None):
+    def _scroll_symbol(self, symbol: str, state: str, scroll_speed_ms: float = None, has_error: bool = False):
         """
         Animates `symbol` scrolling right-to-left across the icon.
 
@@ -395,6 +397,7 @@ class TickerIcon:
             symbol (str): The ticker symbol to scroll, e.g. 'AMD'.
             state (str): Current market state, used for the background color.
             scroll_speed_ms (float, optional): Current scroll speed in ms per char.
+            has_error (bool): Whether the latest fetch for this symbol failed.
 
         Returns:
             None: One animation frame sequence is rendered onto the tray icon.
@@ -413,7 +416,7 @@ class TickerIcon:
             if not self.running or self.paused.is_set():
                 return
             offset = int(distance * step / steps)
-            self.tray_icon.icon = self.icon_gen.generate_scroll_frame(symbol, state, offset)
+            self.tray_icon.icon = self.icon_gen.generate_scroll_frame(symbol, state, offset, has_error=has_error)
             time.sleep(SCROLL_FRAME_INTERVAL_S)
 
     def _show_value(self, data: StockData):
