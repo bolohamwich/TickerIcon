@@ -32,8 +32,10 @@ Launch TickerIcon from the Start Menu or by opening the installed application di
 
 ### Tray Icon Menu
 
-Right-click the tray icon to open the context menu:
+Click the tray icon to jump to the next symbol immediately (in both display modes). Right-click it to open the context menu:
 
+* **Next Symbol** jumps to the next enabled symbol, same as clicking the icon.
+* **Symbols** lists every configured symbol with a checkmark; toggle one to show or hide it. This only filters the display — data is still fetched for all configured symbols — and the last enabled symbol cannot be hidden.
 * **Settings** opens the configuration window.
 * **Pause** temporarily stops price updates and switches the tray icon to a paused state until you unpause it.
 * **Check for Updates** looks for a newer release on GitHub and, if one is found, offers to open its download page in your browser.
