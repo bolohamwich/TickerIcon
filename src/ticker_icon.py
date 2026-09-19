@@ -51,6 +51,16 @@ class TickerIcon:
         }
         self.lock = threading.Lock()
 
+        # Symbols currently shown by the display loop (quick menu toggles);
+        # data is still fetched for every configured ticker. Guarded by self.lock.
+        self.enabled_symbols = set(self.config['tickers'])
+
+        # Set by the icon-click handler to jump the display to the next symbol.
+        self.skip_requested = threading.Event()
+
+        # Set when the enabled-symbol set changes so display loops re-read it.
+        self.display_dirty = threading.Event()
+
         # Set once the first fetch completes, so the display loop doesn't
         # show stale/zeroed data before real data is available.
         self.data_ready = threading.Event()
@@ -74,6 +84,9 @@ class TickerIcon:
             'Check for Updates', self.on_check_for_updates
         )
         menu = pystray.Menu(
+            # default=True makes a left click on the icon trigger this item
+            pystray.MenuItem('Next Symbol', self.on_next_symbol, default=True),
+            pystray.MenuItem('Symbols', pystray.Menu(self._symbol_menu_items)),
             pystray.MenuItem('Settings', self.on_settings),
             pystray.MenuItem('Pause', self.on_toggle_pause, checked=lambda item: self.paused.is_set()),
             self.update_menu_item,
@@ -108,6 +121,85 @@ class TickerIcon:
         """
         self.running = False
         icon.stop()
+
+    def on_next_symbol(self, icon, menu_item):
+        """
+        Default tray action, triggered by clicking the icon: jumps the
+        display to the next enabled symbol immediately. Does nothing when
+        fewer than two symbols are enabled.
+
+        Args:
+            icon (pystray.Icon): The tray icon instance.
+            menu_item (pystray.MenuItem): The menu item that was activated.
+        """
+        if len(self._get_enabled_symbols()) > 1:
+            self.skip_requested.set()
+
+    def on_toggle_symbol(self, symbol: str):
+        """
+        Toggles a symbol's visibility in the display rotation. This is a
+        view-only filter: data is still fetched for every configured
+        symbol. The last enabled symbol cannot be disabled.
+
+        Args:
+            symbol (str): The configured ticker symbol to toggle.
+        """
+        with self.lock:
+            if symbol in self.enabled_symbols:
+                enabled = {s for s in self.config['tickers'] if s in self.enabled_symbols}
+                if len(enabled) <= 1:
+                    return
+                self.enabled_symbols.discard(symbol)
+            else:
+                self.enabled_symbols.add(symbol)
+        self.display_dirty.set()
+        if self.tray_icon is not None:
+            self.tray_icon.update_menu()
+
+    def _get_enabled_symbols(self):
+        """
+        Returns:
+            List[str]: The enabled symbols, in configuration order.
+        """
+        with self.lock:
+            return [s for s in self.config['tickers'] if s in self.enabled_symbols]
+
+    def _symbol_menu_items(self):
+        """
+        Generates the dynamic 'Symbols' submenu: one checkable item per
+        configured ticker, rebuilt every time the menu opens so it tracks
+        config saves and quick toggles.
+
+        Returns:
+            List[pystray.MenuItem]: The submenu items.
+        """
+        with self.lock:
+            symbols = list(self.config['tickers'])
+
+        def make_action(symbol):
+            # pystray rejects actions with >2 args, so bind via closure
+            return lambda icon, item: self.on_toggle_symbol(symbol)
+
+        return [
+            pystray.MenuItem(
+                symbol,
+                make_action(symbol),
+                checked=lambda item, s=symbol: s in self.enabled_symbols,
+            )
+            for symbol in symbols
+        ]
+
+    def _consume_skip(self) -> bool:
+        """
+        Clears a pending next-symbol request, if any.
+
+        Returns:
+            bool: True if a jump was requested since the last call.
+        """
+        if self.skip_requested.is_set():
+            self.skip_requested.clear()
+            return True
+        return False
 
     def on_settings(self, icon, menu_item):
         """Open a settings window from the tray menu.
@@ -180,6 +272,15 @@ class TickerIcon:
             }
             if any(symbol not in old_snapshot for symbol in self.config['tickers']):
                 self.data_ready.clear()
+            # Keep quick-toggle states for retained tickers; new tickers start enabled
+            old_enabled = self.enabled_symbols
+            self.enabled_symbols = {
+                symbol for symbol in self.config['tickers']
+                if symbol in old_enabled or symbol not in old_snapshot
+            }
+            if not self.enabled_symbols:
+                self.enabled_symbols = set(self.config['tickers'])
+        self.display_dirty.set()
 
         if self.tray_icon is not None:
             self.tray_icon.notify("Settings saved. TickerIcon will use the new configuration.", "TickerIcon")
@@ -309,7 +410,7 @@ class TickerIcon:
             time.sleep(0.1)
 
     def _display_loop(self):
-        """Background loop that cycles through tickers, scrolling then showing each one."""
+        """Background loop that cycles through the enabled tickers, scrolling then showing each one."""
         while self.running:
             if self.paused.is_set():
                 self.tray_icon.icon = self.icon_gen.generate_app_icon()
@@ -323,15 +424,18 @@ class TickerIcon:
                 self.data_ready.wait(timeout=0.1)
                 continue
 
+            # Clear before reading so a toggle landing after the read still wakes us
+            self.display_dirty.clear()
             with self.lock:
-                symbols = list(self.config['tickers'])
+                enabled = [s for s in self.config['tickers'] if s in self.enabled_symbols]
                 continuous_scroll = self.config['continuous_scroll']
 
-            # With a single symbol the name scroll is just noise: the tooltip
-            # already identifies it, so keep the value on screen permanently.
-            if len(symbols) == 1:
+            # With a single enabled symbol the name scroll is just noise: the
+            # tooltip already identifies it, so keep the value on screen permanently.
+            if len(enabled) == 1:
                 with self.lock:
-                    data = self.snapshot.get(symbols[0], StockData(symbol=symbols[0]))
+                    data = self.snapshot.get(enabled[0], StockData(symbol=enabled[0]))
+                self.skip_requested.clear()  # nothing to jump to
                 self._show_value(data)
                 self._interruptible_sleep(1.0)
                 continue
@@ -346,20 +450,20 @@ class TickerIcon:
                 display_seconds = self.config['display_seconds']
                 scroll_speed_ms = self.config['scroll_speed_ms']
 
-            if not symbols:
+            if not enabled:
                 self._interruptible_sleep(0.25)
                 continue
 
-            for symbol in itertools.cycle(symbols):
+            for symbol in itertools.cycle(enabled):
                 if not self.running:
                     return
                 if self.paused.is_set():
                     break
 
                 with self.lock:
-                    current_symbols = list(self.config['tickers'])
-                    if (current_symbols != symbols or self.config['continuous_scroll']
-                            or len(current_symbols) == 1):
+                    current_enabled = [s for s in self.config['tickers'] if s in self.enabled_symbols]
+                    if (current_enabled != enabled or self.config['continuous_scroll']
+                            or len(current_enabled) == 1):
                         break
                     data = self.snapshot.get(symbol, StockData(symbol=symbol))
                     display_seconds = self.config['display_seconds']
@@ -372,8 +476,13 @@ class TickerIcon:
                 if not self.running:
                     return
 
+                # A click during the name scroll advances straight to the next symbol
+                if self._consume_skip() or self.display_dirty.is_set():
+                    continue
+
                 self._show_value(data)
                 self._interruptible_sleep(display_seconds)
+                self._consume_skip()
 
             if not self.running:
                 return
@@ -381,24 +490,26 @@ class TickerIcon:
     def _display_continuous_lap(self):
         """
         Runs one full pass of the continuous-scroll strip, built from the
-        ticker list/snapshot captured at the start of the lap so a fetch
+        enabled tickers/snapshot captured at the start of the lap so a fetch
         that completes mid-lap never causes a visible rewind or reset.
 
         Returns:
             None: Frames are rendered directly onto the tray icon until the
-                strip has fully scrolled past, or the app stops/pauses.
+                strip has fully scrolled past, the enabled symbols change,
+                or the app stops/pauses.
         """
+        self.display_dirty.clear()
         with self.lock:
-            symbols = list(self.config['tickers'])
+            enabled = [s for s in self.config['tickers'] if s in self.enabled_symbols]
             scroll_speed_ms = self.config['scroll_speed_ms']
             snapshot = dict(self.snapshot)
             continuous_gen = self.continuous_gen
 
-        if not symbols:
+        if not enabled:
             self._interruptible_sleep(0.25)
             return
 
-        continuous_gen.build(symbols, snapshot)
+        continuous_gen.build(enabled, snapshot)
         pixels_per_frame = self._continuous_pixels_per_frame(scroll_speed_ms)
 
         offset = 0
@@ -406,6 +517,11 @@ class TickerIcon:
         while offset < continuous_gen.width:
             if not self.running or self.paused.is_set():
                 return
+            if self.display_dirty.is_set():
+                return  # enabled symbols changed; rebuild the strip next lap
+
+            if self._consume_skip():
+                offset = continuous_gen.next_segment_offset(offset)
 
             data = continuous_gen.symbol_at(offset)
             if data is not None and data.symbol != last_symbol:
@@ -456,7 +572,7 @@ class TickerIcon:
         steps = max(int(duration_s / SCROLL_FRAME_INTERVAL_S), 1)
 
         for step in range(steps + 1):
-            if not self.running or self.paused.is_set():
+            if not self.running or self.paused.is_set() or self.skip_requested.is_set():
                 return
             offset = int(distance * step / steps)
             self.tray_icon.icon = self.icon_gen.generate_scroll_frame(symbol, state, offset, has_error=has_error)
@@ -509,13 +625,16 @@ class TickerIcon:
 
     def _interruptible_sleep(self, seconds: float):
         """
-        Sleeps in small increments so shutdown via Quit is near-instant.
+        Sleeps in small increments, waking early on shutdown, pause, a
+        next-symbol jump request, or an enabled-symbol change.
 
         Args:
             seconds (float): Total time to sleep for, in seconds.
         """
         end_time = time.monotonic() + seconds
-        while self.running and not self.paused.is_set() and time.monotonic() < end_time:
+        while (self.running and not self.paused.is_set()
+                and not self.skip_requested.is_set() and not self.display_dirty.is_set()
+                and time.monotonic() < end_time):
             time.sleep(0.1)
 
     def _wait_while_paused(self):

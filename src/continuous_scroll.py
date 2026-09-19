@@ -143,6 +143,28 @@ class ContinuousScrollGenerator:
                 return segment.data
         return None
 
+    def next_segment_offset(self, offset: int) -> int:
+        """
+        Finds the offset that places the start of the segment following
+        `offset` at the window's left edge, wrapping past the strip end.
+        Used by the icon-click "next symbol" jump.
+
+        Args:
+            offset (int): Current horizontal pixel offset into the strip.
+
+        Returns:
+            int: The next segment's start offset, or `offset` unchanged if
+                no strip has been built yet.
+        """
+        if not self._segments or self._width == 0:
+            return offset
+
+        position = offset % self._width
+        for segment in self._segments:
+            if segment.start > position:
+                return segment.start
+        return self._segments[0].start
+
     def _render_segment(self, symbol: str, data: StockData) -> Image.Image:
         """
         Draws one "SYMBOL +X.X%" segment on the static background, with the

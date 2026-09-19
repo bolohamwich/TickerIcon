@@ -55,6 +55,66 @@ def test_on_quit_stops_running_and_the_tray_icon(app):
     mock_icon.stop.assert_called_once()
 
 
+class TestNextSymbol:
+    def test_click_requests_jump_when_multiple_symbols_enabled(self, app):
+        app.on_next_symbol(app.tray_icon, MagicMock())
+
+        assert app.skip_requested.is_set() is True
+
+    def test_click_does_nothing_with_a_single_enabled_symbol(self, app):
+        app.enabled_symbols = {"AMD"}
+
+        app.on_next_symbol(app.tray_icon, MagicMock())
+
+        assert app.skip_requested.is_set() is False
+
+
+class TestSymbolToggles:
+    def test_all_symbols_enabled_initially(self, app):
+        assert app.enabled_symbols == {"AMD", "AAPL"}
+
+    def test_toggle_disables_an_enabled_symbol(self, app):
+        app.on_toggle_symbol("AAPL")
+
+        assert app.enabled_symbols == {"AMD"}
+        assert app.display_dirty.is_set() is True
+        app.tray_icon.update_menu.assert_called_once()
+
+    def test_toggle_reenables_a_disabled_symbol(self, app):
+        app.enabled_symbols = {"AMD"}
+
+        app.on_toggle_symbol("AAPL")
+
+        assert app.enabled_symbols == {"AMD", "AAPL"}
+
+    def test_last_enabled_symbol_cannot_be_disabled(self, app):
+        app.enabled_symbols = {"AMD"}
+
+        app.on_toggle_symbol("AMD")
+
+        assert app.enabled_symbols == {"AMD"}
+        app.tray_icon.update_menu.assert_not_called()
+
+    def test_menu_lists_every_configured_symbol(self, app):
+        items = app._symbol_menu_items()
+
+        assert [item.text for item in items] == ["AMD", "AAPL"]
+
+    def test_menu_checkmarks_track_enabled_state(self, app):
+        app.enabled_symbols = {"AMD"}
+
+        items = app._symbol_menu_items()
+
+        assert [item.checked for item in items] == [True, False]
+
+    def test_menu_item_click_toggles_its_symbol(self, app):
+        items = app._symbol_menu_items()
+
+        items[1](app.tray_icon)
+
+        assert app.enabled_symbols == {"AMD"}
+
+
 class TestTogglePause:
     def test_first_call_pauses_and_shows_app_icon(self, app):
         app.on_toggle_pause(app.tray_icon, MagicMock())
@@ -129,6 +189,25 @@ class TestApplyConfig:
 
         assert app.data_ready.is_set() is False
         assert set(app.snapshot.keys()) == {"AMD", "AAPL", "NVDA"}
+
+    def test_enables_new_tickers_and_keeps_toggle_state(self, app):
+        app.enabled_symbols = {"AMD"}  # AAPL toggled off
+        new_config = dict(app.config)
+        new_config["tickers"] = ["AMD", "AAPL", "NVDA"]
+
+        app._apply_config(new_config)
+
+        assert app.enabled_symbols == {"AMD", "NVDA"}
+        assert app.display_dirty.is_set() is True
+
+    def test_enables_all_when_every_retained_ticker_was_disabled(self, app):
+        app.enabled_symbols = {"AAPL"}
+        new_config = dict(app.config)
+        new_config["tickers"] = ["AMD"]
+
+        app._apply_config(new_config)
+
+        assert app.enabled_symbols == {"AMD"}
 
 
 def test_on_check_for_updates_starts_only_one_worker(app):
@@ -299,6 +378,24 @@ class TestInterruptibleSleep:
 
         assert time.monotonic() - start < 1
 
+    def test_returns_immediately_when_skip_requested(self, app):
+        app.running = True
+        app.skip_requested.set()
+
+        start = time.monotonic()
+        app._interruptible_sleep(5)
+
+        assert time.monotonic() - start < 1
+
+    def test_returns_immediately_when_display_dirty(self, app):
+        app.running = True
+        app.display_dirty.set()
+
+        start = time.monotonic()
+        app._interruptible_sleep(5)
+
+        assert time.monotonic() - start < 1
+
 
 class TestShowValue:
     def test_sets_icon_image_and_tooltip(self, app):
@@ -344,6 +441,14 @@ class TestScrollSymbol:
 
         mock_sleep.assert_not_called()
 
+    def test_exits_immediately_when_skip_requested(self, app):
+        app.running = True
+        app.skip_requested.set()
+        with patch("src.ticker_icon.time.sleep") as mock_sleep:
+            app._scroll_symbol("AMD", "open")
+
+        mock_sleep.assert_not_called()
+
     def test_passes_has_error_to_scroll_frame(self, app):
         app.running = True
         app.icon_gen.generate_scroll_frame = MagicMock(return_value=app.icon_gen.generate_loading_frame())
@@ -371,6 +476,23 @@ class TestFetchLoop:
             app._fetch_loop()
 
         assert app.snapshot == fake_snapshot
+
+    def test_fetches_disabled_symbols_too(self, app):
+        app.enabled_symbols = {"AMD"}  # AAPL toggled off in the display
+        requested = set()
+
+        def fake_fetch_all(previous=None):
+            requested.update(previous.keys())
+            app.running = False
+            return dict(previous)
+
+        app.api.fetch_all = fake_fetch_all
+        app.running = True
+
+        with patch.object(app, "_sleep_between_fetches"):
+            app._fetch_loop()
+
+        assert requested == {"AMD", "AAPL"}
 
     def test_passes_previous_snapshot_to_fetch_all(self, app):
         received = []
@@ -447,6 +569,47 @@ class TestDisplayLoop:
 
         assert set(seen_symbols) == set(app.config["tickers"])
 
+    def test_skips_disabled_symbols_in_the_cycle(self, app):
+        app.config["tickers"] = ["AMD", "AAPL", "NVDA"]
+        app.snapshot["NVDA"] = StockData(symbol="NVDA")
+        app.enabled_symbols = {"AMD", "NVDA"}
+        seen_symbols = []
+
+        def fake_scroll(symbol, state):
+            seen_symbols.append(symbol)
+            if len(seen_symbols) >= 4:
+                app.running = False
+
+        app._scroll_symbol = fake_scroll
+        app._show_value = MagicMock()
+        app.running = True
+        app.data_ready.set()
+
+        with patch.object(app, "_interruptible_sleep"):
+            app._display_loop()
+
+        assert set(seen_symbols) == {"AMD", "NVDA"}
+
+    def test_skip_request_jumps_to_next_symbol_without_showing_value(self, app):
+        seen_symbols = []
+
+        def fake_scroll(symbol, state):
+            seen_symbols.append(symbol)
+            app.skip_requested.set()  # click arrived during the name scroll
+            if len(seen_symbols) >= 3:
+                app.running = False
+
+        app._scroll_symbol = fake_scroll
+        app._show_value = MagicMock()
+        app.running = True
+        app.data_ready.set()
+
+        with patch.object(app, "_interruptible_sleep"):
+            app._display_loop()
+
+        app._show_value.assert_not_called()
+        assert seen_symbols == ["AMD", "AAPL", "AMD"]
+
     def test_exits_immediately_when_not_running(self, app):
         app._scroll_symbol = MagicMock()
         app.running = False
@@ -507,6 +670,22 @@ class TestDisplayLoop:
 class TestDisplayLoopSingleSymbol:
     def test_shows_value_without_scrolling_the_name(self, app):
         app.config["tickers"] = ["AMD"]
+        app._scroll_symbol = MagicMock()
+        app._show_value = MagicMock()
+        app.running = True
+        app.data_ready.set()
+
+        def stop(_seconds):
+            app.running = False
+
+        with patch.object(app, "_interruptible_sleep", side_effect=stop):
+            app._display_loop()
+
+        app._scroll_symbol.assert_not_called()
+        app._show_value.assert_called_once()
+
+    def test_single_enabled_symbol_shows_static_value(self, app):
+        app.enabled_symbols = {"AMD"}  # AAPL toggled off
         app._scroll_symbol = MagicMock()
         app._show_value = MagicMock()
         app.running = True
@@ -614,6 +793,51 @@ class TestDisplayContinuousLap:
             app._display_continuous_lap()
 
         mock_sleep.assert_called_once_with(0.25)
+
+    def test_builds_strip_from_enabled_symbols_only(self, app):
+        app.enabled_symbols = {"AMD"}
+        app.running = True
+        app.continuous_gen = MagicMock()
+        app.continuous_gen.width = 0
+
+        app._display_continuous_lap()
+
+        assert app.continuous_gen.build.call_args[0][0] == ["AMD"]
+
+    def test_skip_request_jumps_to_the_next_segment(self, app):
+        app.running = True
+        app.skip_requested.set()
+        app.continuous_gen = MagicMock()
+        app.continuous_gen.width = 40
+        app.continuous_gen.next_segment_offset.return_value = 25
+        app.continuous_gen.symbol_at.return_value = None
+        app.continuous_gen.render_frame.return_value = "frame"
+
+        with patch("src.ticker_icon.time.sleep"), \
+                patch.object(app, "_continuous_pixels_per_frame", return_value=20):
+            app._display_continuous_lap()
+
+        app.continuous_gen.next_segment_offset.assert_called_once_with(0)
+        app.continuous_gen.render_frame.assert_called_once_with(25)
+        assert app.skip_requested.is_set() is False
+
+    def test_returns_when_enabled_symbols_change_mid_lap(self, app):
+        app.running = True
+        app.continuous_gen = MagicMock()
+        app.continuous_gen.width = 10000
+        app.continuous_gen.symbol_at.return_value = None
+
+        def render_and_toggle(offset):
+            app.display_dirty.set()  # a symbol was toggled mid-lap
+            return "frame"
+
+        app.continuous_gen.render_frame.side_effect = render_and_toggle
+
+        with patch("src.ticker_icon.time.sleep"), \
+                patch.object(app, "_continuous_pixels_per_frame", return_value=1):
+            app._display_continuous_lap()
+
+        assert app.continuous_gen.render_frame.call_count == 1
 
 
 class TestContinuousPixelsPerFrame:

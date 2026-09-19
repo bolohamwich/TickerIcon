@@ -153,6 +153,29 @@ class TestSymbolAt:
         assert data is None
 
 
+class TestNextSegmentOffset:
+    def test_returns_offset_unchanged_before_any_build(self, generator):
+        assert generator.next_segment_offset(10) == 10
+
+    def test_jumps_from_leading_gap_to_first_segment(self, generator, snapshot):
+        generator.build(["AMD", "AAPL"], snapshot)
+
+        assert generator.next_segment_offset(0) == ICON_SIZE
+
+    def test_jumps_from_first_segment_to_second(self, generator, snapshot):
+        generator.build(["AMD", "AAPL"], snapshot)
+
+        amd_width = generator.icon_gen.measure_text_width("AMD +5.14%")
+        expected_aapl_start = ICON_SIZE + amd_width + ICON_SIZE
+
+        assert generator.next_segment_offset(ICON_SIZE) == expected_aapl_start
+
+    def test_wraps_from_last_segment_to_first(self, generator, snapshot):
+        generator.build(["AMD", "AAPL"], snapshot)
+
+        assert generator.next_segment_offset(generator.width - 1) == ICON_SIZE
+
+
 class TestFormatSegmentText:
     def test_formats_positive_change_with_two_decimals(self):
         data = StockData(symbol="AMD", change_pct=5.14)
