@@ -63,7 +63,7 @@ class ContinuousScrollGenerator:
         entries = [(symbol, snapshot.get(symbol, StockData(symbol=symbol))) for symbol in symbols]
         segment_images = [(symbol, data, self._render_segment(symbol, data)) for symbol, data in entries]
         segment_colors = [
-            self.icon_gen.bg_colors.get(data.state, self.icon_gen.bg_colors['closed'])
+            self.icon_gen.strip_color(data.state, data.has_error)
             for _, data in entries
         ]
 
@@ -72,15 +72,19 @@ class ContinuousScrollGenerator:
             ICON_SIZE,
         )
 
-        strip = Image.new('RGB', (total_width, ICON_SIZE), color=self.icon_gen.bg_colors['closed'])
+        strip = Image.new('RGB', (total_width, ICON_SIZE), color=self.icon_gen.bg_color)
         draw = ImageDraw.Draw(strip)
         segments = []
         x = 0
         for i, (symbol, data, img) in enumerate(segment_images):
-            # Keep the previous symbol's state color across the gap (wrapping),
-            # so the background only changes when a new state scrolls in.
+            # Keep the previous symbol's strip color across the gap (wrapping),
+            # so the indicator strip only changes when a new state scrolls in.
             gap_color = segment_colors[i - 1]
-            draw.rectangle([(x, 0), (x + ICON_SIZE - 1, ICON_SIZE - 1)], fill=gap_color)
+            if self.icon_gen.strip_width > 0:
+                draw.rectangle(
+                    [(x, ICON_SIZE - self.icon_gen.strip_width), (x + ICON_SIZE - 1, ICON_SIZE - 1)],
+                    fill=gap_color,
+                )
             x += ICON_SIZE  # leading gap, full icon width, keeps symbols visually separated
             start = x
             strip.paste(img, (x, 0))
@@ -104,7 +108,7 @@ class ContinuousScrollGenerator:
             Image.Image: A 64x64 Pillow Image ready for pystray.
         """
         if self._strip is None or self._width == 0:
-            return Image.new('RGB', (ICON_SIZE, ICON_SIZE), color=self.icon_gen.bg_colors['closed'])
+            return Image.new('RGB', (ICON_SIZE, ICON_SIZE), color=self.icon_gen.bg_color)
 
         start_x = offset % self._width
         end_x = start_x + ICON_SIZE
@@ -141,30 +145,29 @@ class ContinuousScrollGenerator:
 
     def _render_segment(self, symbol: str, data: StockData) -> Image.Image:
         """
-        Draws one "SYMBOL +X.X%" segment against its market-state background.
+        Draws one "SYMBOL +X.X%" segment on the static background, with the
+        market-state (or error) strip along the bottom.
 
         Args:
             symbol (str): The ticker symbol, e.g. 'AMD'.
-            data (StockData): Supplies the change percentage and market state used for colors.
+            data (StockData): Supplies the change percentage, market state, and error flag used for colors.
 
         Returns:
             Image.Image: An image exactly as wide as the rendered text (64px tall).
         """
         text = self._format_segment_text(symbol, data)
-        bg_color = self.icon_gen.bg_colors.get(data.state, self.icon_gen.bg_colors['closed'])
         text_color = self.icon_gen.color_positive if data.change_pct >= 0 else self.icon_gen.color_negative
 
         text_width = self.icon_gen.measure_text_width(text)
-        img = Image.new('RGB', (max(text_width, 1), ICON_SIZE), color=bg_color)
+        img = Image.new('RGB', (max(text_width, 1), ICON_SIZE), color=self.icon_gen.bg_color)
         draw = ImageDraw.Draw(img)
 
         bbox = draw.textbbox((0, 0), text, font=self.icon_gen.font)
         text_height = bbox[3] - bbox[1]
-        y = (ICON_SIZE - text_height) / 2 - 4  # Slight upward offset for visual balance
+        y = self.icon_gen._text_y(text_height)
 
         draw.text((0, y), text, fill=text_color, font=self.icon_gen.font)
-        if data.has_error:
-            draw.rectangle([(0, 0), (img.width - 1, ICON_SIZE - 1)], outline=self.icon_gen.color_error_border, width=2)
+        self.icon_gen.draw_strip(draw, img.width, self.icon_gen.strip_color(data.state, data.has_error))
         return img
 
     @staticmethod

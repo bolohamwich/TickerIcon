@@ -46,21 +46,39 @@ class TestGenerateValueFrame:
         image = icon_gen.generate_value_frame(2.5, "open")
         assert image.size == (64, 64)
 
-    def test_uses_state_background_color(self, icon_gen, config):
-        image = icon_gen.generate_value_frame(2.5, "open")
-        assert image.getpixel((0, 0)) == config["bg_open"]
+    def test_background_is_static_regardless_of_state(self, icon_gen, config):
+        for state in ("open", "premarket", "after_hours", "closed"):
+            image = icon_gen.generate_value_frame(2.5, state)
+            assert image.getpixel((0, 0)) == config["bg_closed"]
 
-    def test_falls_back_to_closed_background_for_unknown_state(self, icon_gen, config):
+    def test_bottom_strip_uses_state_color(self, icon_gen, config):
+        image = icon_gen.generate_value_frame(2.5, "open")
+        assert image.getpixel((0, 63)) == config["bg_open"]
+        assert image.getpixel((63, 62)) == config["bg_open"]
+
+    def test_strip_falls_back_to_closed_color_for_unknown_state(self, icon_gen, config):
         image = icon_gen.generate_value_frame(2.5, "some_unknown_state")
+        assert image.getpixel((0, 63)) == config["bg_closed"]
+
+    def test_strip_uses_error_color_when_has_error(self, icon_gen, config):
+        image = icon_gen.generate_value_frame(1.0, "open", has_error=True)
+        assert image.getpixel((0, 63)) == config["color_error_border"]
         assert image.getpixel((0, 0)) == config["bg_closed"]
 
-    def test_draws_error_border_when_has_error(self, icon_gen, config):
-        image = icon_gen.generate_value_frame(1.0, "open", has_error=True)
-        assert image.getpixel((0, 0)) == config["color_error_border"]
-
-    def test_no_border_when_no_error(self, icon_gen, config):
+    def test_strip_uses_state_color_when_no_error(self, icon_gen, config):
         image = icon_gen.generate_value_frame(1.0, "open", has_error=False)
-        assert image.getpixel((0, 0)) == config["bg_open"]
+        assert image.getpixel((0, 63)) == config["bg_open"]
+
+    def test_strip_height_matches_configured_width(self, config):
+        icon_gen = IconGenerator({**config, "strip_width": 4})
+        image = icon_gen.generate_value_frame(1.0, "open")
+        assert image.getpixel((0, 60)) == config["bg_open"]
+        assert image.getpixel((0, 59)) == config["bg_closed"]
+
+    def test_zero_strip_width_disables_the_strip(self, config):
+        icon_gen = IconGenerator({**config, "strip_width": 0})
+        image = icon_gen.generate_value_frame(1.0, "open", has_error=True)
+        assert image.getpixel((0, 63)) == config["bg_closed"]
 
 
 class TestGenerateAppIcon:
@@ -111,13 +129,17 @@ class TestGenerateScrollFrame:
         image = icon_gen.generate_scroll_frame("AMD", "closed", offset=10)
         assert image.size == (64, 64)
 
-    def test_uses_state_background_color(self, icon_gen, config):
+    def test_background_is_static_regardless_of_state(self, icon_gen, config):
         image = icon_gen.generate_scroll_frame("AMD", "premarket", offset=0)
-        assert image.getpixel((0, 0)) == config["bg_premarket"]
-
-    def test_falls_back_to_closed_background_for_unknown_state(self, icon_gen, config):
-        image = icon_gen.generate_scroll_frame("AMD", "some_unknown_state", offset=0)
         assert image.getpixel((0, 0)) == config["bg_closed"]
+
+    def test_bottom_strip_uses_state_color(self, icon_gen, config):
+        image = icon_gen.generate_scroll_frame("AMD", "premarket", offset=0)
+        assert image.getpixel((0, 63)) == config["bg_premarket"]
+
+    def test_strip_falls_back_to_closed_color_for_unknown_state(self, icon_gen, config):
+        image = icon_gen.generate_scroll_frame("AMD", "some_unknown_state", offset=0)
+        assert image.getpixel((0, 63)) == config["bg_closed"]
 
 
 class TestMeasureTextWidth:
@@ -137,3 +159,27 @@ class TestContrastTextColor:
     ])
     def test_picks_readable_text_color(self, bg_color, expected):
         assert IconGenerator._contrast_text_color(bg_color) == expected
+
+
+class TestStripColor:
+    def test_returns_state_color(self, icon_gen, config):
+        assert icon_gen.strip_color("open") == config["bg_open"]
+
+    def test_error_takes_precedence_over_state(self, icon_gen, config):
+        assert icon_gen.strip_color("open", has_error=True) == config["color_error_border"]
+
+    def test_falls_back_to_closed_color_for_unknown_state(self, icon_gen, config):
+        assert icon_gen.strip_color("nope") == config["bg_closed"]
+
+
+class TestTextY:
+    def test_text_moves_up_by_strip_width(self, config):
+        default_gen = IconGenerator({**config, "strip_width": 2})
+        wide_gen = IconGenerator({**config, "strip_width": 6})
+
+        assert wide_gen._text_y(20) == default_gen._text_y(20) - 4
+
+    def test_zero_strip_width_keeps_centered_offset(self, config):
+        icon_gen = IconGenerator({**config, "strip_width": 0})
+
+        assert icon_gen._text_y(20) == (64 - 20) / 2 - 4

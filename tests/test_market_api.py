@@ -105,6 +105,17 @@ class TestFetchAll:
         assert set(snapshot.keys()) == {"AMD", "AAPL"}
         assert mock_fetch_one.call_count == 2
 
+    def test_fetch_all_passes_previous_data_per_symbol(self):
+        api = MarketAPI(["AMD", "AAPL"])
+        previous = {"AMD": StockData(symbol="AMD", price=100.0)}
+
+        with patch.object(MarketAPI, "_fetch_one", side_effect=lambda symbol, prev: prev) as mock_fetch_one:
+            snapshot = api.fetch_all(previous)
+
+        assert snapshot["AMD"] is previous["AMD"]
+        assert snapshot["AAPL"] is None
+        assert mock_fetch_one.call_count == 2
+
 
 class TestFetchOne:
     def test_marks_error_when_history_is_empty(self):
@@ -125,6 +136,46 @@ class TestFetchOne:
             data = api._fetch_one("AMD")
 
         assert data.has_error is True
+
+    def test_keeps_last_known_values_when_fetch_raises(self):
+        api = MarketAPI(["AMD"])
+        previous = StockData(
+            symbol="AMD", price=123.45, change_pct=1.5, day_high=125.0,
+            day_low=120.0, state="open", exchange="Nasdaq",
+        )
+
+        with patch("src.market_api.yf.Ticker", side_effect=RuntimeError("boom")):
+            data = api._fetch_one("AMD", previous)
+
+        assert data.has_error is True
+        assert data.price == 123.45
+        assert data.change_pct == 1.5
+        assert data.day_high == 125.0
+        assert data.day_low == 120.0
+        assert data.state == "open"
+        assert data.exchange == "Nasdaq"
+
+    def test_keeps_last_known_values_when_history_is_empty(self):
+        api = MarketAPI(["AMD"])
+        previous = StockData(symbol="AMD", price=123.45, change_pct=1.5)
+        mock_ticker = MagicMock()
+        mock_ticker.history.return_value = pd.DataFrame()
+
+        with patch("src.market_api.yf.Ticker", return_value=mock_ticker):
+            data = api._fetch_one("AMD", previous)
+
+        assert data.has_error is True
+        assert data.price == 123.45
+        assert data.change_pct == 1.5
+
+    def test_error_result_does_not_mutate_previous_snapshot(self):
+        api = MarketAPI(["AMD"])
+        previous = StockData(symbol="AMD", price=123.45, has_error=False)
+
+        with patch("src.market_api.yf.Ticker", side_effect=RuntimeError("boom")):
+            api._fetch_one("AMD", previous)
+
+        assert previous.has_error is False
 
     def test_parses_successful_response(self):
         api = MarketAPI(["AMD"])

@@ -8,7 +8,7 @@ A lightweight, open-source Windows application that embeds a live, automatically
 Relies on Yahoo Finance for 1-minute updates during regular, pre-market, and after-hours trading sessions.
 
 ## Features
-* **At-a-glance:** The icon displays the daily percentage change, colored green or red (drops decimals for double-digit moves to ensure taskbar readability). Icon background is color-coded for market state (premarket, open, after hours, closed). Red border around the background to indicate issues in connectivity.
+* **At-a-glance:** The icon displays the daily percentage change, colored green or red (drops decimals for double-digit moves to ensure taskbar readability), on a static background. A thin strip along the bottom of the icon is color-coded for market state (premarket, open, after hours, closed) and turns to the error color when data can't be fetched — in which case the icon keeps showing the last known values. The strip width is configurable and can be set to 0 to disable it.
 * **Detailed Tooltips:** Hover over the icon to instantly see current price, exact percentage change, day high, and day low.
 * **Sleep:** Automatically suspends network requests overnight and on weekends.
 * **Updates:** Use the tray menu's **Check for Updates** command to download and launch the latest installer.
@@ -44,9 +44,11 @@ Right-click the tray icon to open the context menu:
 The **Settings** window lets you update:
 
 * the list of tracked ticker symbols (up to ten symbols)
-* positive, negative, error-border, and market-state colors
+* positive, negative, error-strip, and market-state strip colors (the "closed" color is also the static icon background)
 * scroll speed
 * how long each price stays visible
+* the icon font size
+* the width of the market-state/error strip at the bottom of the icon (0 disables it)
 * whether all tracked symbols scroll continuously in one line
 
 After you save your changes, TickerIcon reloads the configuration automatically.

@@ -15,6 +15,7 @@ SCROLL_SPEED_MS=500
 DISPLAY_SECONDS=8
 CONTINUOUS_SCROLL=true
 FONT_SIZE=36
+STRIP_WIDTH=2
 """
 
 
@@ -41,6 +42,7 @@ def test_load_parses_tickers_and_colors(config_file):
     assert config["display_seconds"] == 8.0
     assert config["continuous_scroll"] is True
     assert config["font_size"] == 36
+    assert config["strip_width"] == 2
 
 
 def test_load_defaults_continuous_scroll_to_true_when_missing(tmp_path):
@@ -110,6 +112,54 @@ def test_load_rejects_non_positive_font_size(tmp_path):
         ConfigHandler(str(path)).load()
 
 
+def test_load_defaults_strip_width_when_missing(tmp_path):
+    content = CONFIG_CONTENT.replace("STRIP_WIDTH=2\n", "")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["strip_width"] == 2
+
+
+def test_load_parses_custom_strip_width(tmp_path):
+    content = CONFIG_CONTENT.replace("STRIP_WIDTH=2", "STRIP_WIDTH=4")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["strip_width"] == 4
+
+
+def test_load_allows_zero_strip_width(tmp_path):
+    content = CONFIG_CONTENT.replace("STRIP_WIDTH=2", "STRIP_WIDTH=0")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["strip_width"] == 0
+
+
+def test_load_rejects_negative_strip_width(tmp_path):
+    content = CONFIG_CONTENT.replace("STRIP_WIDTH=2", "STRIP_WIDTH=-1")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    with pytest.raises(ValueError, match="STRIP_WIDTH"):
+        ConfigHandler(str(path)).load()
+
+
+def test_load_rejects_oversized_strip_width(tmp_path):
+    content = CONFIG_CONTENT.replace("STRIP_WIDTH=2", "STRIP_WIDTH=17")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    with pytest.raises(ValueError, match="STRIP_WIDTH"):
+        ConfigHandler(str(path)).load()
+
+
 def test_load_strips_whitespace_and_uppercases_tickers(tmp_path):
     content = CONFIG_CONTENT.replace("TICKER=AMD,AAPL,MSFT", "TICKER= amd , aapl ,msft ")
     path = tmp_path / "config.cfg"
@@ -157,6 +207,7 @@ def test_save_round_trips_config(tmp_path):
         "display_seconds": 5.5,
         "continuous_scroll": True,
         "font_size": 40,
+        "strip_width": 3,
     }
 
     ConfigHandler(str(path)).save(original)

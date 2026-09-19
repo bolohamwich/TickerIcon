@@ -224,8 +224,10 @@ class TickerIcon:
             with self.lock:
                 api = self.api
                 config_version = self.config
+                previous_snapshot = self.snapshot
 
-            snapshot = api.fetch_all()
+            # Pass the last snapshot so failed fetches keep showing last known values
+            snapshot = api.fetch_all(previous_snapshot)
 
             with self.lock:
                 if api is not self.api or config_version is not self.config:

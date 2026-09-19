@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -57,28 +57,36 @@ class MarketAPI:
         """
         self.ticker_symbols = ticker_symbols
 
-    def fetch_all(self) -> Dict[str, StockData]:
+    def fetch_all(self, previous: Optional[Dict[str, StockData]] = None) -> Dict[str, StockData]:
         """
         Fetches the latest snapshot for every tracked ticker.
 
         Note: yfinance has no batch quote endpoint, so this issues one
         request per ticker (sequentially, to avoid hammering Yahoo Finance).
 
+        Args:
+            previous (Optional[Dict[str, StockData]]): The last known snapshot;
+                a ticker whose fetch fails keeps its previous values (flagged
+                with has_error) instead of resetting to zeros.
+
         Returns:
             Dict[str, StockData]: Latest data keyed by ticker symbol.
         """
-        return {symbol: self._fetch_one(symbol) for symbol in self.ticker_symbols}
+        previous = previous or {}
+        return {symbol: self._fetch_one(symbol, previous.get(symbol)) for symbol in self.ticker_symbols}
 
-    def _fetch_one(self, symbol: str) -> StockData:
+    def _fetch_one(self, symbol: str, previous: Optional[StockData] = None) -> StockData:
         """
         Fetches and parses quote and session data for a single ticker.
 
         Args:
             symbol (str): The ticker symbol to fetch, e.g. 'AMD'.
+            previous (Optional[StockData]): The last known snapshot for this
+                symbol, returned (with has_error set) if the fetch fails.
 
         Returns:
-            StockData: The parsed snapshot, with has_error set if the
-                fetch failed or returned no data.
+            StockData: The parsed snapshot, or the last known values with
+                has_error set if the fetch failed or returned no data.
         """
         data = StockData(symbol=symbol)
         try:
@@ -87,8 +95,7 @@ class MarketAPI:
             todays_data = ticker.history(period='1d', interval='1m', prepost=True)
 
             if todays_data.empty:
-                data.has_error = True
-                return data
+                return self._error_result(symbol, previous)
 
             data.price = todays_data['Close'].iloc[-1]
 
@@ -112,9 +119,27 @@ class MarketAPI:
                 data.day_low = todays_data['Low'].min()
 
         except Exception:
-            data.has_error = True
+            return self._error_result(symbol, previous)
 
         return data
+
+    @staticmethod
+    def _error_result(symbol: str, previous: Optional[StockData]) -> StockData:
+        """
+        Builds the snapshot returned for a failed fetch: the last known
+        values flagged with has_error, or a zeroed placeholder if the
+        symbol has never been fetched successfully.
+
+        Args:
+            symbol (str): The ticker symbol whose fetch failed.
+            previous (Optional[StockData]): The last known snapshot, if any.
+
+        Returns:
+            StockData: The snapshot to display for the failed fetch.
+        """
+        if previous is not None:
+            return replace(previous, has_error=True)
+        return StockData(symbol=symbol, has_error=True)
 
     @staticmethod
     def _resolve_previous_close(ticker, metadata: dict, state: str) -> float:
