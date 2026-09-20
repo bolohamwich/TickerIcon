@@ -447,7 +447,7 @@ class TickerIcon:
                 continue
 
             with self.lock:
-                display_seconds = self.config['display_seconds']
+                display_ms = self.config['display_ms']
                 scroll_speed_ms = self.config['scroll_speed_ms']
 
             if not enabled:
@@ -466,7 +466,7 @@ class TickerIcon:
                             or len(current_enabled) == 1):
                         break
                     data = self.snapshot.get(symbol, StockData(symbol=symbol))
-                    display_seconds = self.config['display_seconds']
+                    display_ms = self.config['display_ms']
                     scroll_speed_ms = self.config['scroll_speed_ms']
 
                 try:
@@ -481,7 +481,7 @@ class TickerIcon:
                     continue
 
                 self._show_value(data)
-                self._interruptible_sleep(display_seconds)
+                self._interruptible_sleep(display_ms / 1000.0)
                 self._consume_skip()
 
             if not self.running:

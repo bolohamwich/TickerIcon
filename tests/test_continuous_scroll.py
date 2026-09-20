@@ -7,14 +7,18 @@ from src.market_api import StockData
 
 @pytest.fixture
 def config():
+    def scheme(strip):
+        return {"positive": (15, 175, 80), "negative": (235, 60, 60), "strip": strip}
+
     return {
-        "bg_open": (224, 255, 224),
-        "bg_premarket": (255, 255, 224),
-        "bg_after_hours": (224, 224, 255),
-        "bg_closed": (50, 50, 50),
-        "color_positive": (15, 175, 80),
-        "color_negative": (235, 60, 60),
-        "color_error_border": (255, 40, 40),
+        "bg_color": (50, 50, 50),
+        "error_color": (255, 40, 40),
+        "state_colors": {
+            "open": scheme((224, 255, 224)),
+            "premarket": scheme((255, 255, 224)),
+            "after_hours": scheme((224, 224, 255)),
+            "closed": scheme((50, 50, 50)),
+        },
     }
 
 
@@ -66,8 +70,8 @@ class TestBuild:
         gap_before_aapl = ICON_SIZE + generator.icon_gen.measure_text_width("AMD +5.14%")
         frame = generator.render_frame(gap_before_aapl)
 
-        assert frame.getpixel((0, ICON_SIZE - 1)) == config["bg_open"]
-        assert frame.getpixel((0, 0)) == config["bg_closed"]
+        assert frame.getpixel((0, ICON_SIZE - 1)) == config["state_colors"]["open"]["strip"]
+        assert frame.getpixel((0, 0)) == config["bg_color"]
 
     def test_leading_gap_strip_wraps_to_last_segments_state_color(self, generator, snapshot, config):
         generator.build(["AMD", "AAPL"], snapshot)
@@ -75,7 +79,7 @@ class TestBuild:
         # First gap follows the wrapped-around AAPL (closed) segment.
         frame = generator.render_frame(0)
 
-        assert frame.getpixel((0, ICON_SIZE - 1)) == config["bg_closed"]
+        assert frame.getpixel((0, ICON_SIZE - 1)) == config["state_colors"]["closed"]["strip"]
 
     def test_background_stays_static_when_all_symbols_share_a_state(self, generator, config):
         snapshot = {
@@ -86,8 +90,8 @@ class TestBuild:
 
         for offset in range(0, generator.width, ICON_SIZE // 2):
             frame = generator.render_frame(offset)
-            assert frame.getpixel((0, 0)) == config["bg_closed"]
-            assert frame.getpixel((0, ICON_SIZE - 1)) == config["bg_premarket"]
+            assert frame.getpixel((0, 0)) == config["bg_color"]
+            assert frame.getpixel((0, ICON_SIZE - 1)) == config["state_colors"]["premarket"]["strip"]
 
     def test_error_segment_gets_error_colored_strip(self, generator, config):
         snapshot = {
@@ -97,7 +101,7 @@ class TestBuild:
 
         frame = generator.render_frame(ICON_SIZE)  # window fully inside the AMD segment
 
-        assert frame.getpixel((0, ICON_SIZE - 1)) == config["color_error_border"]
+        assert frame.getpixel((0, ICON_SIZE - 1)) == config["error_color"]
 
     def test_zero_strip_width_disables_the_strip(self, config, snapshot):
         icon_gen = IconGenerator({**config, "strip_width": 0})
@@ -106,7 +110,7 @@ class TestBuild:
 
         for offset in range(0, generator.width, ICON_SIZE // 2):
             frame = generator.render_frame(offset)
-            assert frame.getpixel((0, ICON_SIZE - 1)) == config["bg_closed"]
+            assert frame.getpixel((0, ICON_SIZE - 1)) == config["bg_color"]
 
 
 class TestRenderFrame:

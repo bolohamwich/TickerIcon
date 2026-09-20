@@ -1,9 +1,32 @@
 import pytest
 
-from src.config_handler import ConfigHandler, MAX_TICKERS
+from src.config_handler import ConfigHandler, MARKET_STATES, MAX_TICKERS
 
 CONFIG_CONTENT = """
 TICKER=AMD,AAPL,MSFT
+COLOR_BACKGROUND=#323232
+COLOR_ERROR=#FF2828
+COLOR_OPEN_POSITIVE=#0FAF50
+COLOR_OPEN_NEGATIVE=#EB3C3C
+COLOR_OPEN_STRIP=#E0FFE0
+COLOR_PREMARKET_POSITIVE=#10AF50
+COLOR_PREMARKET_NEGATIVE=#EC3C3C
+COLOR_PREMARKET_STRIP=#FFFFE0
+COLOR_AFTER_HOURS_POSITIVE=#11AF50
+COLOR_AFTER_HOURS_NEGATIVE=#ED3C3C
+COLOR_AFTER_HOURS_STRIP=#E0E0FF
+COLOR_CLOSED_POSITIVE=#12AF50
+COLOR_CLOSED_NEGATIVE=#EE3C3C
+COLOR_CLOSED_STRIP=#323232
+SCROLL_SPEED_MS=500
+DISPLAY_MS=8000
+CONTINUOUS_SCROLL=true
+FONT_SIZE=36
+STRIP_WIDTH=2
+"""
+
+LEGACY_CONFIG_CONTENT = """
+TICKER=AMD,AAPL
 COLOR_POSITIVE=#0FAF50
 COLOR_NEGATIVE=#EB3C3C
 COLOR_ERROR_BORDER=#FF2828
@@ -14,8 +37,6 @@ COLOR_CLOSED=#323232
 SCROLL_SPEED_MS=500
 DISPLAY_SECONDS=8
 CONTINUOUS_SCROLL=true
-FONT_SIZE=36
-STRIP_WIDTH=2
 """
 
 
@@ -31,18 +52,51 @@ def test_load_parses_tickers_and_colors(config_file):
     config = ConfigHandler(config_file).load()
 
     assert config["tickers"] == ["AMD", "AAPL", "MSFT"]
-    assert config["color_positive"] == (15, 175, 80)
-    assert config["color_negative"] == (235, 60, 60)
-    assert config["color_error_border"] == (255, 40, 40)
-    assert config["bg_open"] == (224, 255, 224)
-    assert config["bg_premarket"] == (255, 255, 224)
-    assert config["bg_after_hours"] == (224, 224, 255)
-    assert config["bg_closed"] == (50, 50, 50)
+    assert config["bg_color"] == (50, 50, 50)
+    assert config["error_color"] == (255, 40, 40)
+    assert config["state_colors"]["open"] == {
+        "positive": (15, 175, 80), "negative": (235, 60, 60), "strip": (224, 255, 224),
+    }
+    assert config["state_colors"]["premarket"] == {
+        "positive": (16, 175, 80), "negative": (236, 60, 60), "strip": (255, 255, 224),
+    }
+    assert config["state_colors"]["after_hours"] == {
+        "positive": (17, 175, 80), "negative": (237, 60, 60), "strip": (224, 224, 255),
+    }
+    assert config["state_colors"]["closed"] == {
+        "positive": (18, 175, 80), "negative": (238, 60, 60), "strip": (50, 50, 50),
+    }
     assert config["scroll_speed_ms"] == 500
-    assert config["display_seconds"] == 8.0
+    assert config["display_ms"] == 8000
     assert config["continuous_scroll"] is True
     assert config["font_size"] == 36
     assert config["strip_width"] == 2
+
+
+def test_load_accepts_legacy_color_and_display_keys(tmp_path):
+    path = tmp_path / "config.cfg"
+    path.write_text(LEGACY_CONFIG_CONTENT)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["bg_color"] == (50, 50, 50)  # from COLOR_CLOSED
+    assert config["error_color"] == (255, 40, 40)  # from COLOR_ERROR_BORDER
+    for state in MARKET_STATES:
+        assert config["state_colors"][state]["positive"] == (15, 175, 80)
+        assert config["state_colors"][state]["negative"] == (235, 60, 60)
+    assert config["state_colors"]["open"]["strip"] == (224, 255, 224)  # from COLOR_OPEN
+    assert config["display_ms"] == 8000  # from DISPLAY_SECONDS=8
+
+
+def test_load_falls_back_to_defaults_when_no_color_keys_exist(tmp_path):
+    path = tmp_path / "config.cfg"
+    path.write_text("TICKER=AMD\nSCROLL_SPEED_MS=500\nDISPLAY_MS=8000\n")
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["bg_color"] == (50, 50, 50)
+    assert config["error_color"] == (255, 40, 40)
+    assert config["state_colors"]["premarket"]["strip"] == (255, 255, 224)
 
 
 def test_load_defaults_continuous_scroll_to_true_when_missing(tmp_path):
@@ -74,12 +128,12 @@ def test_load_rejects_non_positive_scroll_speed(tmp_path):
         ConfigHandler(str(path)).load()
 
 
-def test_load_rejects_non_positive_display_seconds(tmp_path):
-    content = CONFIG_CONTENT.replace("DISPLAY_SECONDS=8", "DISPLAY_SECONDS=0")
+def test_load_rejects_non_positive_display_ms(tmp_path):
+    content = CONFIG_CONTENT.replace("DISPLAY_MS=8000", "DISPLAY_MS=0")
     path = tmp_path / "config.cfg"
     path.write_text(content)
 
-    with pytest.raises(ValueError, match="DISPLAY_SECONDS"):
+    with pytest.raises(ValueError, match="DISPLAY_MS"):
         ConfigHandler(str(path)).load()
 
 
@@ -196,15 +250,16 @@ def test_save_round_trips_config(tmp_path):
     path = tmp_path / "config.cfg"
     original = {
         "tickers": ["AMD", "MSFT"],
-        "color_positive": (10, 20, 30),
-        "color_negative": (40, 50, 60),
-        "color_error_border": (70, 80, 90),
-        "bg_open": (100, 110, 120),
-        "bg_premarket": (130, 140, 150),
-        "bg_after_hours": (160, 170, 180),
-        "bg_closed": (190, 200, 210),
+        "bg_color": (10, 20, 30),
+        "error_color": (40, 50, 60),
+        "state_colors": {
+            "open": {"positive": (1, 2, 3), "negative": (4, 5, 6), "strip": (7, 8, 9)},
+            "premarket": {"positive": (11, 12, 13), "negative": (14, 15, 16), "strip": (17, 18, 19)},
+            "after_hours": {"positive": (21, 22, 23), "negative": (24, 25, 26), "strip": (27, 28, 29)},
+            "closed": {"positive": (31, 32, 33), "negative": (34, 35, 36), "strip": (37, 38, 39)},
+        },
         "scroll_speed_ms": 250,
-        "display_seconds": 5.5,
+        "display_ms": 5500,
         "continuous_scroll": True,
         "font_size": 40,
         "strip_width": 3,
@@ -216,19 +271,35 @@ def test_save_round_trips_config(tmp_path):
     assert loaded == original
 
 
+def test_save_rejects_missing_state_scheme(tmp_path):
+    path = tmp_path / "config.cfg"
+    config = {
+        "tickers": ["AMD"],
+        "bg_color": (10, 20, 30),
+        "error_color": (40, 50, 60),
+        "state_colors": {
+            "open": {"positive": (1, 2, 3), "negative": (4, 5, 6), "strip": (7, 8, 9)},
+        },
+        "scroll_speed_ms": 250,
+        "display_ms": 5500,
+    }
+
+    with pytest.raises(ValueError, match="premarket"):
+        ConfigHandler(str(path)).save(config)
+
+
 def test_save_rejects_too_many_tickers(tmp_path):
     path = tmp_path / "config.cfg"
     config = {
         "tickers": [f"SYM{i}" for i in range(MAX_TICKERS + 1)],
-        "color_positive": (1, 2, 3),
-        "color_negative": (4, 5, 6),
-        "color_error_border": (7, 8, 9),
-        "bg_open": (10, 11, 12),
-        "bg_premarket": (13, 14, 15),
-        "bg_after_hours": (16, 17, 18),
-        "bg_closed": (19, 20, 21),
+        "bg_color": (10, 20, 30),
+        "error_color": (40, 50, 60),
+        "state_colors": {
+            state: {"positive": (1, 2, 3), "negative": (4, 5, 6), "strip": (7, 8, 9)}
+            for state in MARKET_STATES
+        },
         "scroll_speed_ms": 100,
-        "display_seconds": 3.0,
+        "display_ms": 3000,
     }
 
     with pytest.raises(ValueError, match="MAX_TICKERS"):

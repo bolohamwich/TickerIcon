@@ -30,22 +30,14 @@ class IconGenerator:
     def __init__(self, config: AppConfig):
         """
         Args:
-            config (AppConfig): Loaded app configuration with the state
-                strip colors and price change text colors.
+            config (AppConfig): Loaded app configuration with the per-state
+                color schemes and the global background/error colors.
         """
-        # Market-state strip colors; the 'closed' color doubles as the static background
-        self.bg_colors = {
-            'open': config['bg_open'],
-            'premarket': config['bg_premarket'],
-            'after_hours': config['bg_after_hours'],
-            'closed': config['bg_closed']
-        }
-        self.bg_color = config['bg_closed']
-
-        # Text Colors
-        self.color_positive = config['color_positive']
-        self.color_negative = config['color_negative']
-        self.color_error_border = config['color_error_border']
+        self.bg_color = config['bg_color']
+        self.error_color = config['error_color']
+        # Per-state schemes: {'open'|'premarket'|'after_hours'|'closed':
+        # {'positive', 'negative', 'strip'}}
+        self.state_colors = config['state_colors']
 
         # Height of the bottom state/error strip in pixels (0 disables it)
         self.strip_width = config.get('strip_width', DEFAULT_STRIP_WIDTH)
@@ -63,6 +55,33 @@ class IconGenerator:
         except (IOError, OSError):
             self._app_icon = None
 
+    def _state_scheme(self, state: str) -> dict:
+        """
+        Resolves the color scheme for a market state, falling back to the
+        'closed' scheme for unknown states.
+
+        Args:
+            state (str): Current market state (e.g., 'open', 'closed').
+
+        Returns:
+            dict: The state's {'positive', 'negative', 'strip'} colors.
+        """
+        return self.state_colors.get(state, self.state_colors['closed'])
+
+    def text_color(self, state: str, change_pct: float) -> tuple:
+        """
+        Resolves the percentage text color from the state's color scheme.
+
+        Args:
+            state (str): Current market state (e.g., 'open', 'closed').
+            change_pct (float): Percentage change for the day.
+
+        Returns:
+            tuple: The (R, G, B) text color.
+        """
+        scheme = self._state_scheme(state)
+        return scheme['positive'] if change_pct >= 0 else scheme['negative']
+
     def strip_color(self, state: str, has_error: bool = False) -> tuple:
         """
         Resolves the color of the bottom indicator strip.
@@ -76,8 +95,8 @@ class IconGenerator:
             tuple: The (R, G, B) strip color.
         """
         if has_error:
-            return self.color_error_border
-        return self.bg_colors.get(state, self.bg_colors['closed'])
+            return self.error_color
+        return self._state_scheme(state)['strip']
 
     def draw_strip(self, draw: ImageDraw.ImageDraw, width: int, color: tuple) -> None:
         """
@@ -106,7 +125,7 @@ class IconGenerator:
         Returns:
             Image.Image: A 64x64 Pillow Image ready for pystray.
         """
-        text_color = self.color_positive if change_pct >= 0 else self.color_negative
+        text_color = self.text_color(state, change_pct)
 
         img = Image.new('RGB', (64, 64), color=self.bg_color)
         draw = ImageDraw.Draw(img)
