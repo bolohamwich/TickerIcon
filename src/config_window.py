@@ -194,7 +194,7 @@ class ConfigWindow:
         hex_value = ConfigHandler._rgb_to_hex(rgb)
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
-        ttk.Label(row, text=label, width=10).pack(side="left")
+        ttk.Label(row, text=label, width=12).pack(side="left")
         entry = ttk.Entry(row, width=9)
         entry.insert(0, hex_value)
         entry.pack(side="left")

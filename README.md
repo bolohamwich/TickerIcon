@@ -53,7 +53,7 @@ After you save your changes, TickerIcon reloads the configuration automatically.
 
 ### Updates
 
-Use **Check for Updates** from the tray icon menu to look for a newer release. When an update is available, TickerIcon shows a prompt announcing the new version and asking whether to open the download page; choosing **Yes** opens the release page in your default browser (in a new tab if the browser is already running). Download and run the new `TickerIcon-Setup.exe` from there — reinstalling with a newer installer upgrades the app in place and keeps your existing `config.cfg`.
+Use **Check for Updates** from the tray icon menu to look for a newer release. A brief "Checking for updates..." box appears while GitHub is queried; you are then either told that TickerIcon is already at the latest version, or shown a prompt announcing the new version and asking whether to open the download page. Choosing **Yes** opens the release page in your default browser (in a new tab if the browser is already running). Download and run the new `TickerIcon-Setup.exe` from there — reinstalling with a newer installer upgrades the app in place and keeps your existing `config.cfg`.
 
 ## Running on Startup
 Choose **Start TickerIcon when I sign in to Windows** during installation if you want it to launch automatically at sign-in. If you skipped that option, run the latest installer again and enable the startup option.
