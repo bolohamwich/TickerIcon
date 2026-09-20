@@ -8,7 +8,7 @@ A lightweight, open-source Windows application that embeds a live, automatically
 Relies on Yahoo Finance for 1-minute updates during regular, pre-market, and after-hours trading sessions.
 
 ## Features
-* **At-a-glance:** The icon displays the daily percentage change, colored green or red (drops decimals for double-digit moves to ensure taskbar readability), on a static background. A thin strip along the bottom of the icon is color-coded for market state (premarket, open, after hours, closed) and turns to the error color when data can't be fetched — in which case the icon keeps showing the last known values. The strip width is configurable and can be set to 0 to disable it.
+* **At-a-glance:** The icon displays the daily percentage change on a static background, with a thin strip along the bottom that is color-coded for market state (premarket, open, after hours, closed) and turns to the error color when data can't be fetched — in which case the icon keeps showing the last known values. Every market state has its own color scheme (positive/negative text colors and strip color), so symbols from exchanges around the world stay readable in one rotation. The strip width is configurable and can be set to 0 to disable it.
 * **Detailed Tooltips:** Hover over the icon to instantly see current price, exact percentage change, day high, and day low.
 * **Sleep:** Automatically suspends network requests overnight and on weekends.
 * **Updates:** Use the tray menu's **Check for Updates** command to see whether a newer release is available and open its download page.
@@ -43,17 +43,13 @@ Click the tray icon to jump to the next symbol immediately (in both display mode
 
 ### Settings
 
-The **Settings** window lets you update:
+The **Settings** window is organized into three sections:
 
-* the list of tracked ticker symbols (up to ten symbols)
-* positive, negative, error-strip, and market-state strip colors (the "closed" color is also the static icon background)
-* scroll speed
-* how long each price stays visible
-* the icon font size
-* the width of the market-state/error strip at the bottom of the icon (0 disables it)
-* whether all tracked symbols scroll continuously in one line
+* **General** — scroll speed and display time (milliseconds, 100 ms steps), icon font size and strip width (pixels), and the continuous scroll toggle.
+* **Symbols** — the list of tracked ticker symbols (up to ten).
+* **Colors** — the static background and error-strip colors, plus a color scheme per market state (positive text, negative text, and strip color for Open, Premarket, After hours, and Closed). Click any swatch to open a color picker.
 
-After you save your changes, TickerIcon reloads the configuration automatically.
+After you save your changes, TickerIcon reloads the configuration automatically. Configuration files from older versions are read transparently and upgraded to the new format on the next save.
 
 ### Updates
 

@@ -178,7 +178,7 @@ class ContinuousScrollGenerator:
             Image.Image: An image exactly as wide as the rendered text (64px tall).
         """
         text = self._format_segment_text(symbol, data)
-        text_color = self.icon_gen.color_positive if data.change_pct >= 0 else self.icon_gen.color_negative
+        text_color = self.icon_gen.text_color(data.state, data.change_pct)
 
         text_width = self.icon_gen.measure_text_width(text)
         img = Image.new('RGB', (max(text_width, 1), ICON_SIZE), color=self.icon_gen.bg_color)
