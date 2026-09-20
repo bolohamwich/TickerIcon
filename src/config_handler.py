@@ -217,6 +217,11 @@ class ConfigHandler:
         ]
         for state in MARKET_STATES:
             scheme = state_colors[state]
+            missing = [k for k in ('positive', 'negative', 'strip') if k not in scheme]
+            if missing:
+                raise ValueError(
+                    f"Missing {', '.join(missing)} color(s) for market state '{state}'."
+                )
             prefix = f"COLOR_{state.upper()}"
             lines += [
                 f"{prefix}_POSITIVE={self._rgb_to_hex(scheme['positive'])}",
