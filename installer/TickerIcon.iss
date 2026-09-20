@@ -1,8 +1,11 @@
 ; Build dist\TickerIcon first with PyInstaller on Windows.
 ; Compile this file with Inno Setup 6.
+; Pass the release version with /DMyAppVersion=x.y.z (falls back to 0.0.0-dev).
 
 #define MyAppName "TickerIcon"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0-dev"
+#endif
 #define MyAppPublisher "TickerIcon"
 #define MyAppExeName "TickerIcon.exe"
 

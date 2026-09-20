@@ -210,38 +210,53 @@ class TestApplyConfig:
         assert app.enabled_symbols == {"AMD"}
 
 
+def _real_update_menu_item(app):
+    """Returns the real pystray 'Check for Updates' item from the app's menu."""
+    return next(item for item in app._build_menu().items if item.text == "Check for Updates")
+
+
 def test_on_check_for_updates_starts_only_one_worker(app):
-    menu_item = MagicMock()
+    # Use the real pystray MenuItem: a MagicMock hid the read-only .enabled crash
+    menu_item = _real_update_menu_item(app)
     worker = MagicMock()
 
     with patch("src.ticker_icon.threading.Thread", return_value=worker) as thread:
-        app.on_check_for_updates(app.tray_icon, menu_item)
-        app.on_check_for_updates(app.tray_icon, menu_item)
+        menu_item(app.tray_icon)
+        menu_item(app.tray_icon)
 
     assert app.update_in_progress is True
-    assert menu_item.enabled is False
     app.tray_icon.update_menu.assert_called_once()
     thread.assert_called_once_with(target=app._check_for_updates, daemon=True)
     worker.start.assert_called_once()
+
+
+def test_update_menu_item_grays_out_while_check_in_progress(app):
+    menu_item = _real_update_menu_item(app)
+
+    assert menu_item.enabled is True
+
+    app.update_in_progress = True
+
+    assert menu_item.enabled is False
 
 
 def test_check_for_updates_opens_download_page_when_user_accepts(app):
     release = MagicMock(version="1.1.0", download_page_url="https://github.com/bolohamwich/TickerIcon/releases/tag/v1.1.0")
     app.running = True
     app.update_in_progress = True
-    app.update_menu_item = MagicMock()
     app.update_checker = MagicMock()
     app.update_checker.check.return_value = release
 
-    with patch.object(app, "_prompt_open_download_page", return_value=True) as prompt, \
+    with patch.object(app, "_open_checking_dialog", return_value=None) as progress, \
+            patch.object(app, "_prompt_open_download_page", return_value=True) as prompt, \
             patch("src.ticker_icon.webbrowser.open") as browser_open:
         app._check_for_updates()
 
+    progress.assert_called_once()
     prompt.assert_called_once_with(release)
     browser_open.assert_called_once_with(release.download_page_url, new=2)
     assert app.running is True
     assert app.update_in_progress is False
-    assert app.update_menu_item.enabled is True
     app.tray_icon.stop.assert_not_called()
     app.tray_icon.update_menu.assert_called_once()
 
@@ -249,50 +264,115 @@ def test_check_for_updates_opens_download_page_when_user_accepts(app):
 def test_check_for_updates_does_not_open_browser_when_user_declines(app):
     release = MagicMock(version="1.1.0", download_page_url="https://example.test/release")
     app.update_in_progress = True
-    app.update_menu_item = MagicMock()
     app.update_checker = MagicMock()
     app.update_checker.check.return_value = release
 
-    with patch.object(app, "_prompt_open_download_page", return_value=False), \
+    with patch.object(app, "_open_checking_dialog", return_value=None), \
+            patch.object(app, "_prompt_open_download_page", return_value=False), \
             patch("src.ticker_icon.webbrowser.open") as browser_open:
         app._check_for_updates()
 
     browser_open.assert_not_called()
     assert app.update_in_progress is False
-    assert app.update_menu_item.enabled is True
     app.tray_icon.update_menu.assert_called_once()
 
 
-def test_check_for_updates_notifies_when_already_up_to_date(app):
+def test_check_for_updates_shows_dialog_when_already_up_to_date(app):
     app.update_in_progress = True
-    app.update_menu_item = MagicMock()
     app.update_checker = MagicMock()
     app.update_checker.check.return_value = None
 
-    with patch("src.ticker_icon.webbrowser.open") as browser_open:
+    with patch.object(app, "_open_checking_dialog", return_value=None), \
+            patch.object(app, "_show_up_to_date_dialog") as up_to_date, \
+            patch("src.ticker_icon.webbrowser.open") as browser_open:
         app._check_for_updates()
 
-    app.tray_icon.notify.assert_called_once_with(
-        "You are already running the latest version.", "TickerIcon"
-    )
+    up_to_date.assert_called_once()
     browser_open.assert_not_called()
     assert app.update_in_progress is False
 
 
+def test_check_for_updates_closes_progress_dialog_even_on_failure(app):
+    app.update_in_progress = True
+    app.update_checker = MagicMock()
+    app.update_checker.check.side_effect = RuntimeError("boom")
+    progress_dialog = MagicMock()
+
+    with patch.object(app, "_open_checking_dialog", return_value=progress_dialog):
+        app._check_for_updates()
+
+    progress_dialog.destroy.assert_called_once()
+
+
 def test_check_for_updates_notifies_and_resets_guard_on_failure(app):
     app.update_in_progress = True
-    app.update_menu_item = MagicMock()
     app.update_checker = MagicMock()
     app.update_checker.check.side_effect = RuntimeError("network unavailable")
 
-    app._check_for_updates()
+    with patch.object(app, "_open_checking_dialog", return_value=None):
+        app._check_for_updates()
 
     app.tray_icon.notify.assert_called_once_with(
         "Update check failed: network unavailable", "TickerIcon"
     )
     assert app.update_in_progress is False
-    assert app.update_menu_item.enabled is True
     app.tray_icon.update_menu.assert_called_once()
+
+
+class TestCheckingDialog:
+    def test_open_renders_a_topmost_checking_box(self, app):
+        fake_root = MagicMock()
+        fake_tk = MagicMock()
+        fake_tk.Tk.return_value = fake_root
+
+        with patch("src.ticker_icon.tk", fake_tk):
+            dialog = app._open_checking_dialog()
+
+        assert dialog is fake_root
+        fake_tk.Label.assert_called_once()
+        assert "Checking for updates" in fake_tk.Label.call_args[1]["text"]
+        fake_root.update.assert_called_once()
+
+    def test_open_returns_none_without_tkinter(self, app):
+        with patch("src.ticker_icon.tk", None):
+            assert app._open_checking_dialog() is None
+
+    def test_close_destroys_the_dialog(self, app):
+        dialog = MagicMock()
+
+        app._close_checking_dialog(dialog)
+
+        dialog.destroy.assert_called_once()
+
+    def test_close_ignores_none(self, app):
+        app._close_checking_dialog(None)
+
+
+class TestUpToDateDialog:
+    def test_shows_info_dialog(self, app):
+        fake_root = MagicMock()
+        fake_tk = MagicMock()
+        fake_tk.Tk.return_value = fake_root
+        fake_messagebox = MagicMock()
+
+        with patch("src.ticker_icon.tk", fake_tk), \
+                patch("src.ticker_icon.messagebox", fake_messagebox):
+            app._show_up_to_date_dialog()
+
+        fake_messagebox.showinfo.assert_called_once_with(
+            "TickerIcon Update",
+            "TickerIcon is already at the latest version.",
+            parent=fake_root,
+        )
+        fake_root.destroy.assert_called_once()
+
+    def test_falls_back_to_notification_without_tkinter(self, app):
+        with patch("src.ticker_icon.tk", None), patch("src.ticker_icon.messagebox", None):
+            app._show_up_to_date_dialog()
+
+        app.tray_icon.notify.assert_called_once_with(
+            "TickerIcon is already at the latest version.", "TickerIcon"
+        )
 
 
 class TestPromptOpenDownloadPage:

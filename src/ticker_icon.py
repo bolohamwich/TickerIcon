@@ -71,27 +71,12 @@ class TickerIcon:
         self.update_checker = UpdateChecker()
         self.update_lock = threading.Lock()
         self.update_in_progress = False
-        self.update_menu_item = None
         self.settings_lock = threading.Lock()
         self.settings_open = False
 
     def start(self):
         """Initializes and runs the system tray application."""
         self.running = True
-
-        # Setup right-click menu
-        self.update_menu_item = pystray.MenuItem(
-            'Check for Updates', self.on_check_for_updates
-        )
-        menu = pystray.Menu(
-            # default=True makes a left click on the icon trigger this item
-            pystray.MenuItem('Next Symbol', self.on_next_symbol, default=True),
-            pystray.MenuItem('Symbols', pystray.Menu(self._symbol_menu_items)),
-            pystray.MenuItem('Settings', self.on_settings),
-            pystray.MenuItem('Pause', self.on_toggle_pause, checked=lambda item: self.paused.is_set()),
-            self.update_menu_item,
-            pystray.MenuItem('Quit', self.on_quit),
-        )
 
         # Generate initial placeholder icon
         first_symbol = self.config['tickers'][0]
@@ -100,7 +85,7 @@ class TickerIcon:
             "stock_ticker",
             initial_image,
             title=f"Loading {first_symbol}...",
-            menu=menu
+            menu=self._build_menu()
         )
 
         # Start the background fetch and display loops
@@ -110,6 +95,28 @@ class TickerIcon:
 
         # Run system tray (this blocks the main thread until closed)
         self.tray_icon.run()
+
+    def _build_menu(self):
+        """
+        Builds the tray context menu.
+
+        Returns:
+            pystray.Menu: The menu attached to the tray icon.
+        """
+        return pystray.Menu(
+            # default=True makes a left click on the icon trigger this item
+            pystray.MenuItem('Next Symbol', self.on_next_symbol, default=True),
+            pystray.MenuItem('Symbols', pystray.Menu(self._symbol_menu_items)),
+            pystray.MenuItem('Settings', self.on_settings),
+            pystray.MenuItem('Pause', self.on_toggle_pause, checked=lambda item: self.paused.is_set()),
+            # MenuItem.enabled is a read-only property, so the disabled state
+            # while a check runs must come from this callable
+            pystray.MenuItem(
+                'Check for Updates', self.on_check_for_updates,
+                enabled=lambda item: not self.update_in_progress,
+            ),
+            pystray.MenuItem('Quit', self.on_quit),
+        )
 
     def on_quit(self, icon, menu_item):
         """
@@ -292,23 +299,28 @@ class TickerIcon:
                 return
             self.update_in_progress = True
 
-        menu_item.enabled = False
-        icon.update_menu()
+        icon.update_menu()  # re-evaluates the item's enabled callable, graying it out
         threading.Thread(target=self._check_for_updates, daemon=True).start()
 
     def _check_for_updates(self):
         """
-        Checks GitHub for a newer release and, if one exists, asks the user
-        whether to open its download page in the default browser.
+        Checks GitHub for a newer release behind a progress dialog and, if
+        one exists, asks the user whether to open its download page in the
+        default browser; otherwise reports that the app is up to date.
 
         Returns:
             None: Runs on the update worker thread; always releases the
                 in-progress guard and re-enables the menu item.
         """
+        progress = self._open_checking_dialog()
         try:
-            release = self.update_checker.check()
+            try:
+                release = self.update_checker.check()
+            finally:
+                self._close_checking_dialog(progress)
+
             if release is None:
-                self._notify("You are already running the latest version.")
+                self._show_up_to_date_dialog()
                 return
 
             if self._prompt_open_download_page(release):
@@ -320,10 +332,59 @@ class TickerIcon:
         finally:
             with self.update_lock:
                 self.update_in_progress = False
-            if self.update_menu_item is not None:
-                self.update_menu_item.enabled = True
             if self.tray_icon is not None:
                 self.tray_icon.update_menu()
+
+    def _open_checking_dialog(self):
+        """
+        Shows a small topmost "Checking for updates..." box. It is rendered
+        with a single update() call since the worker thread runs no mainloop.
+
+        Returns:
+            Optional[tk.Tk]: The dialog root, or None when Tkinter is unavailable.
+        """
+        if tk is None:
+            return None
+        root = tk.Tk()
+        root.title("TickerIcon")
+        root.resizable(False, False)
+        root.attributes("-topmost", True)
+        tk.Label(root, text="Checking for updates...", padx=24, pady=16).pack()
+        root.eval('tk::PlaceWindow . center')
+        root.update()
+        return root
+
+    def _close_checking_dialog(self, dialog):
+        """
+        Closes the progress dialog opened by _open_checking_dialog.
+
+        Args:
+            dialog (Optional[tk.Tk]): The dialog root, or None.
+        """
+        if dialog is None:
+            return
+        try:
+            dialog.destroy()
+        except Exception:  # pragma: no cover - window already gone
+            pass
+
+    def _show_up_to_date_dialog(self):
+        """
+        Tells the user no newer release exists, falling back to a tray
+        notification when Tkinter is unavailable.
+        """
+        message = "TickerIcon is already at the latest version."
+        if tk is None or messagebox is None:
+            self._notify(message)
+            return
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)  # tray-triggered dialog has no parent window to raise it
+        try:
+            messagebox.showinfo("TickerIcon Update", message, parent=root)
+        finally:
+            root.destroy()
 
     def _prompt_open_download_page(self, release) -> bool:
         """
