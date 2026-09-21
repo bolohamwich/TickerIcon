@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 
 from PIL import Image, ImageDraw
 
+from src.config_handler import DEFAULT_TICKER_VALUE_MODE, TICKER_VALUE_MODES
 from src.icon_generator import IconGenerator
 from src.market_api import StockData
 
@@ -28,13 +29,22 @@ class ContinuousScrollGenerator:
     continuous scroll mode so symbols and their values are never truncated.
     """
 
-    def __init__(self, icon_gen: IconGenerator):
+    def __init__(self, icon_gen: IconGenerator, config: Optional[dict] = None):
         """
         Args:
             icon_gen (IconGenerator): Supplies the font and state/change
                 colors so the strip matches the rest of the tray icon.
+            config (Optional[dict]): App configuration supplying the ticker
+                value mode and daily high/low display options; defaults to
+                percentage-only when omitted.
         """
         self.icon_gen = icon_gen
+        config = config or {}
+        mode = config.get('ticker_value_mode', DEFAULT_TICKER_VALUE_MODE)
+        self.value_mode = mode if mode in TICKER_VALUE_MODES else DEFAULT_TICKER_VALUE_MODE
+        self.show_daily_high = bool(config.get('show_daily_high', False))
+        self.show_daily_low = bool(config.get('show_daily_low', False))
+        self.high_low_pct = bool(config.get('high_low_pct', False))
         self._strip: Optional[Image.Image] = None
         self._segments: List[_Segment] = []
         self._width = 0
@@ -192,16 +202,44 @@ class ContinuousScrollGenerator:
         self.icon_gen.draw_strip(draw, img.width, self.icon_gen.strip_color(data.state, data.has_error))
         return img
 
-    @staticmethod
-    def _format_segment_text(symbol: str, data: StockData) -> str:
+    def _format_segment_text(self, symbol: str, data: StockData) -> str:
         """
-        Formats one ticker's continuous-scroll label, e.g. 'AMD +5.14%'.
+        Formats one ticker's continuous-scroll label according to the
+        configured value mode and high/low options, e.g. 'AMD +5.14%',
+        'AMD 123.45 +5.14%', or 'AMD +5.14% ↑125.00 ↓119.50'.
 
         Args:
             symbol (str): The ticker symbol, e.g. 'AMD'.
-            data (StockData): Supplies the percentage change to display.
+            data (StockData): Supplies the price, percentage change, and daily extremes.
 
         Returns:
-            str: The symbol followed by its signed percentage change.
+            str: The formatted segment label.
         """
-        return f"{symbol} {data.change_pct:+.2f}%"
+        parts = [symbol]
+        if self.value_mode in ('price', 'both'):
+            parts.append(f"{data.price:.2f}")
+        if self.value_mode in ('percentage', 'both'):
+            parts.append(f"{data.change_pct:+.2f}%")
+        if self.show_daily_high:
+            parts.append("↑" + self._format_extreme(data.day_high, data.prev_close))
+        if self.show_daily_low:
+            parts.append("↓" + self._format_extreme(data.day_low, data.prev_close))
+        return " ".join(parts)
+
+    def _format_extreme(self, value: float, prev_close: float) -> str:
+        """
+        Formats a daily high/low value, appending its change percentage
+        against the previous close when the high_low_pct option is enabled.
+
+        Args:
+            value (float): The daily high or low price.
+            prev_close (float): The previous close the percentage is computed against.
+
+        Returns:
+            str: The formatted value, e.g. '125.00' or '125.00 (+1.26%)'.
+        """
+        text = f"{value:.2f}"
+        if self.high_low_pct and prev_close > 0:
+            pct = (value - prev_close) / prev_close * 100
+            text += f" ({pct:+.2f}%)"
+        return text

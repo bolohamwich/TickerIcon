@@ -11,9 +11,11 @@ from src.config_handler import (
     ConfigHandler,
     DEFAULT_FONT_SIZE,
     DEFAULT_STRIP_WIDTH,
+    DEFAULT_TICKER_VALUE_MODE,
     MARKET_STATES,
     MAX_STRIP_WIDTH,
     MAX_TICKERS,
+    TICKER_VALUE_MODES,
 )
 
 # Uniform outer/section margin in pixels
@@ -24,6 +26,12 @@ STATE_LABELS = {
     'premarket': 'Premarket',
     'after_hours': 'After hours',
     'closed': 'Closed',
+}
+
+VALUE_MODE_LABELS = {
+    'percentage': 'Percentage',
+    'price': 'Price',
+    'both': 'Both',
 }
 
 
@@ -119,6 +127,38 @@ class ConfigWindow:
             text="Scroll all symbols continuously in one line",
             variable=self.continuous_scroll_var,
         ).pack(anchor="w", pady=(6, 0))
+
+        row = ttk.Frame(section)
+        row.pack(fill="x", pady=(6, 2))
+        ttk.Label(row, text="Ticker values", width=20).pack(side="left")
+        value_mode = ttk.Combobox(
+            row, state="readonly", width=12,
+            values=[VALUE_MODE_LABELS[mode] for mode in TICKER_VALUE_MODES],
+        )
+        value_mode.set(VALUE_MODE_LABELS[self.config.get("ticker_value_mode", DEFAULT_TICKER_VALUE_MODE)])
+        value_mode.pack(side="left")
+        self.entries["ticker_value_mode"] = value_mode
+
+        self.show_daily_high_var = tk.BooleanVar(value=self.config.get("show_daily_high", False))
+        ttk.Checkbutton(
+            section,
+            text="Show daily high (\u2191) in the ticker",
+            variable=self.show_daily_high_var,
+        ).pack(anchor="w", pady=(2, 0))
+
+        self.show_daily_low_var = tk.BooleanVar(value=self.config.get("show_daily_low", False))
+        ttk.Checkbutton(
+            section,
+            text="Show daily low (\u2193) in the ticker",
+            variable=self.show_daily_low_var,
+        ).pack(anchor="w", pady=(2, 0))
+
+        self.high_low_pct_var = tk.BooleanVar(value=self.config.get("high_low_pct", False))
+        ttk.Checkbutton(
+            section,
+            text="Show high/low change percentages",
+            variable=self.high_low_pct_var,
+        ).pack(anchor="w", pady=(2, 0))
 
     def _build_symbols_section(self, parent):
         """Builds the Symbols section: the tracked ticker list.
@@ -305,6 +345,11 @@ class ConfigWindow:
         if not 0 <= strip_width <= MAX_STRIP_WIDTH:
             raise ValueError(f"Strip width must be between 0 and {MAX_STRIP_WIDTH}.")
 
+        mode_label = self.entries["ticker_value_mode"].get().strip()
+        mode_by_label = {label: mode for mode, label in VALUE_MODE_LABELS.items()}
+        if mode_label not in mode_by_label:
+            raise ValueError(f"Ticker values must be one of: {', '.join(VALUE_MODE_LABELS.values())}.")
+
         return {
             "tickers": tickers,
             "bg_color": get_hex("bg_color"),
@@ -320,6 +365,10 @@ class ConfigWindow:
             "scroll_speed_ms": scroll_speed_ms,
             "display_ms": display_ms,
             "continuous_scroll": bool(self.continuous_scroll_var.get()),
+            "ticker_value_mode": mode_by_label[mode_label],
+            "show_daily_high": bool(self.show_daily_high_var.get()),
+            "show_daily_low": bool(self.show_daily_low_var.get()),
+            "high_low_pct": bool(self.high_low_pct_var.get()),
             "font_size": font_size,
             "strip_width": strip_width,
         }

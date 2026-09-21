@@ -19,6 +19,10 @@ MAX_STRIP_WIDTH = 16
 # Market states that each have their own color scheme, in display order.
 MARKET_STATES = ('open', 'premarket', 'after_hours', 'closed')
 
+# What the continuous ticker shows for each symbol.
+TICKER_VALUE_MODES = ('percentage', 'price', 'both')
+DEFAULT_TICKER_VALUE_MODE = 'percentage'
+
 # Fallback colors used when a config file predates per-state color schemes.
 DEFAULT_BG_COLOR: RGB = (50, 50, 50)
 DEFAULT_ERROR_COLOR: RGB = (255, 40, 40)
@@ -46,6 +50,10 @@ class AppConfig(TypedDict):
     scroll_speed_ms: int
     display_ms: int
     continuous_scroll: bool
+    ticker_value_mode: str
+    show_daily_high: bool
+    show_daily_low: bool
+    high_low_pct: bool
     font_size: int
     strip_width: int
 
@@ -145,6 +153,10 @@ class ConfigHandler:
         if not 0 <= strip_width <= MAX_STRIP_WIDTH:
             raise ValueError(f"STRIP_WIDTH must be between 0 and {MAX_STRIP_WIDTH}.")
 
+        ticker_value_mode = section.get("TICKER_VALUE_MODE", DEFAULT_TICKER_VALUE_MODE).strip().lower()
+        if ticker_value_mode not in TICKER_VALUE_MODES:
+            raise ValueError(f"TICKER_VALUE_MODE must be one of: {', '.join(TICKER_VALUE_MODES)}.")
+
         state_colors: Dict[str, StateColors] = {}
         for state in MARKET_STATES:
             prefix = f"COLOR_{state.upper()}"
@@ -162,6 +174,10 @@ class ConfigHandler:
             scroll_speed_ms=scroll_speed_ms,
             display_ms=display_ms,
             continuous_scroll=section.getboolean("CONTINUOUS_SCROLL", fallback=True),
+            ticker_value_mode=ticker_value_mode,
+            show_daily_high=section.getboolean("SHOW_DAILY_HIGH", fallback=False),
+            show_daily_low=section.getboolean("SHOW_DAILY_LOW", fallback=False),
+            high_low_pct=section.getboolean("HIGH_LOW_PCT", fallback=False),
             font_size=font_size,
             strip_width=strip_width,
         )
@@ -197,6 +213,10 @@ class ConfigHandler:
             raise ValueError("FONT_SIZE must be positive.")
         if not 0 <= strip_width <= MAX_STRIP_WIDTH:
             raise ValueError(f"STRIP_WIDTH must be between 0 and {MAX_STRIP_WIDTH}.")
+
+        ticker_value_mode = str(config.get('ticker_value_mode', DEFAULT_TICKER_VALUE_MODE)).strip().lower()
+        if ticker_value_mode not in TICKER_VALUE_MODES:
+            raise ValueError(f"TICKER_VALUE_MODE must be one of: {', '.join(TICKER_VALUE_MODES)}.")
 
         state_colors = config['state_colors']
         missing_states = [state for state in MARKET_STATES if state not in state_colors]
@@ -238,6 +258,15 @@ class ConfigHandler:
             "",
             "# Scroll every tracked symbol continuously in one line instead of one at a time",
             f"CONTINUOUS_SCROLL={'true' if config.get('continuous_scroll', True) else 'false'}",
+            "",
+            "# What the continuous ticker shows per symbol: percentage, price, or both",
+            f"TICKER_VALUE_MODE={ticker_value_mode}",
+            "",
+            "# Show the daily high (↑) and/or low (↓) in the continuous ticker;",
+            "# HIGH_LOW_PCT also appends their change percentage vs. previous close",
+            f"SHOW_DAILY_HIGH={'true' if config.get('show_daily_high', False) else 'false'}",
+            f"SHOW_DAILY_LOW={'true' if config.get('show_daily_low', False) else 'false'}",
+            f"HIGH_LOW_PCT={'true' if config.get('high_low_pct', False) else 'false'}",
             "",
             "# Icon font size in pixels (values above ~44 may clip the percentage text)",
             f"FONT_SIZE={font_size}",

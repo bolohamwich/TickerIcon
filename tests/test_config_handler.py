@@ -21,6 +21,10 @@ COLOR_CLOSED_STRIP=#323232
 SCROLL_SPEED_MS=500
 DISPLAY_MS=8000
 CONTINUOUS_SCROLL=true
+TICKER_VALUE_MODE=both
+SHOW_DAILY_HIGH=true
+SHOW_DAILY_LOW=true
+HIGH_LOW_PCT=true
 FONT_SIZE=36
 STRIP_WIDTH=2
 """
@@ -69,6 +73,10 @@ def test_load_parses_tickers_and_colors(config_file):
     assert config["scroll_speed_ms"] == 500
     assert config["display_ms"] == 8000
     assert config["continuous_scroll"] is True
+    assert config["ticker_value_mode"] == "both"
+    assert config["show_daily_high"] is True
+    assert config["show_daily_low"] is True
+    assert config["high_low_pct"] is True
     assert config["font_size"] == 36
     assert config["strip_width"] == 2
 
@@ -135,6 +143,50 @@ def test_load_rejects_non_positive_display_ms(tmp_path):
 
     with pytest.raises(ValueError, match="DISPLAY_MS"):
         ConfigHandler(str(path)).load()
+
+
+def test_load_defaults_ticker_display_options_when_missing(tmp_path):
+    content = CONFIG_CONTENT
+    for line in ("TICKER_VALUE_MODE=both\n", "SHOW_DAILY_HIGH=true\n",
+                 "SHOW_DAILY_LOW=true\n", "HIGH_LOW_PCT=true\n"):
+        content = content.replace(line, "")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    config = ConfigHandler(str(path)).load()
+
+    assert config["ticker_value_mode"] == "percentage"
+    assert config["show_daily_high"] is False
+    assert config["show_daily_low"] is False
+    assert config["high_low_pct"] is False
+
+
+def test_load_rejects_unknown_ticker_value_mode(tmp_path):
+    content = CONFIG_CONTENT.replace("TICKER_VALUE_MODE=both", "TICKER_VALUE_MODE=candles")
+    path = tmp_path / "config.cfg"
+    path.write_text(content)
+
+    with pytest.raises(ValueError, match="TICKER_VALUE_MODE"):
+        ConfigHandler(str(path)).load()
+
+
+def test_save_rejects_unknown_ticker_value_mode(tmp_path):
+    path = tmp_path / "config.cfg"
+    config = {
+        "tickers": ["AMD"],
+        "bg_color": (10, 20, 30),
+        "error_color": (40, 50, 60),
+        "state_colors": {
+            state: {"positive": (1, 2, 3), "negative": (4, 5, 6), "strip": (7, 8, 9)}
+            for state in MARKET_STATES
+        },
+        "scroll_speed_ms": 250,
+        "display_ms": 5500,
+        "ticker_value_mode": "candles",
+    }
+
+    with pytest.raises(ValueError, match="TICKER_VALUE_MODE"):
+        ConfigHandler(str(path)).save(config)
 
 
 def test_load_defaults_font_size_when_missing(tmp_path):
@@ -261,6 +313,10 @@ def test_save_round_trips_config(tmp_path):
         "scroll_speed_ms": 250,
         "display_ms": 5500,
         "continuous_scroll": True,
+        "ticker_value_mode": "both",
+        "show_daily_high": True,
+        "show_daily_low": False,
+        "high_low_pct": True,
         "font_size": 40,
         "strip_width": 3,
     }
