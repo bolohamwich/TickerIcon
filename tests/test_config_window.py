@@ -103,6 +103,7 @@ class FakeTtkModule:
     Frame = FakeWidget
     Entry = FakeEntry
     Spinbox = FakeSpinbox
+    Combobox = FakeSpinbox
     Label = FakeWidget
     Labelframe = FakeWidget
     Button = FakeWidget
@@ -155,6 +156,10 @@ def make_config(**overrides):
         "scroll_speed_ms": 100,
         "display_ms": 2000,
         "continuous_scroll": True,
+        "ticker_value_mode": "percentage",
+        "show_daily_high": False,
+        "show_daily_low": False,
+        "high_low_pct": False,
         "font_size": 36,
         "strip_width": 2,
     }
@@ -182,7 +187,11 @@ def test_config_window_collects_valid_config(fake_tk):
     window.entries["display_ms"].value = "7500"
     window.entries["font_size"].value = "40"
     window.entries["strip_width"].value = "3"
+    window.entries["ticker_value_mode"].value = "Both"
     window.continuous_scroll_var.set(True)
+    window.show_daily_high_var.set(True)
+    window.show_daily_low_var.set(True)
+    window.high_low_pct_var.set(True)
 
     collected = window._collect_config()
 
@@ -198,17 +207,30 @@ def test_config_window_collects_valid_config(fake_tk):
             "positive": (1, 2, 3), "negative": (4, 5, 6), "strip": (7, 8, 9),
         }
     assert collected["continuous_scroll"] is True
+    assert collected["ticker_value_mode"] == "both"
+    assert collected["show_daily_high"] is True
+    assert collected["show_daily_low"] is True
+    assert collected["high_low_pct"] is True
 
 
 def test_config_window_prefills_fields_from_config(fake_tk):
-    window = config_window_module.ConfigWindow("config.cfg", make_config())
+    window = config_window_module.ConfigWindow("config.cfg", make_config(ticker_value_mode="price"))
 
     assert window.entries["tickers"].get() == "AMD"
     assert window.entries["scroll_speed_ms"].get() == "100"
     assert window.entries["display_ms"].get() == "2000"
+    assert window.entries["ticker_value_mode"].get() == "Price"
     assert window.entries["bg_color"].get() == "#323232"
     assert window.entries["open_positive"].get() == "#010203"
     assert window._swatches["open_positive"].kwargs["bg"] == "#010203"
+
+
+def test_config_window_rejects_unknown_ticker_value_mode(fake_tk):
+    window = config_window_module.ConfigWindow("config.cfg", make_config())
+    window.entries["ticker_value_mode"].value = "Candles"
+
+    with pytest.raises(ValueError, match="Ticker values"):
+        window._collect_config()
 
 
 def test_config_window_uses_expected_spinbox_increments(fake_tk):
@@ -249,7 +271,9 @@ def test_config_window_save_writes_file_and_calls_callback(tmp_path, fake_tk):
     window.entries["display_ms"].value = "3500"
     window.entries["font_size"].value = "44"
     window.entries["strip_width"].value = "0"
+    window.entries["ticker_value_mode"].value = "Both"
     window.continuous_scroll_var.set(True)
+    window.show_daily_high_var.set(True)
 
     callback_calls = []
     window.on_save = callback_calls.append
@@ -262,6 +286,9 @@ def test_config_window_save_writes_file_and_calls_callback(tmp_path, fake_tk):
     assert saved["scroll_speed_ms"] == 180
     assert saved["display_ms"] == 3500
     assert saved["continuous_scroll"] is True
+    assert saved["ticker_value_mode"] == "both"
+    assert saved["show_daily_high"] is True
+    assert saved["show_daily_low"] is False
     assert saved["font_size"] == 44
     assert saved["strip_width"] == 0
     assert saved["state_colors"] == make_config()["state_colors"]

@@ -240,6 +240,45 @@ def test_update_menu_item_grays_out_while_check_in_progress(app):
     assert menu_item.enabled is False
 
 
+class TestRefreshNow:
+    def test_is_the_second_menu_item(self, app):
+        items = app._build_menu().items
+
+        assert items[1].text == "Refresh Now"
+
+    def test_click_requests_an_immediate_fetch(self, app):
+        menu_item = next(item for item in app._build_menu().items if item.text == "Refresh Now")
+
+        menu_item(app.tray_icon)
+
+        assert app.refresh_requested.is_set() is True
+
+    def test_sleep_between_fetches_wakes_on_refresh_request(self, app):
+        app.running = True
+        app.data_ready.set()
+        app.refresh_requested.set()
+
+        start = time.monotonic()
+        app._sleep_between_fetches(5)
+
+        assert time.monotonic() - start < 1
+
+    def test_fetch_loop_clears_the_request_before_fetching(self, app):
+        app.refresh_requested.set()
+
+        def fake_fetch_all(previous=None):
+            app.running = False
+            return dict(previous)
+
+        app.api.fetch_all = fake_fetch_all
+        app.running = True
+
+        with patch.object(app, "_sleep_between_fetches"):
+            app._fetch_loop()
+
+        assert app.refresh_requested.is_set() is False
+
+
 def test_check_for_updates_opens_download_page_when_user_accepts(app):
     release = MagicMock(version="1.1.0", download_page_url="https://github.com/bolohamwich/TickerIcon/releases/tag/v1.1.0")
     app.running = True

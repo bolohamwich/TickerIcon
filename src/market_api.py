@@ -36,6 +36,7 @@ class StockData:
     change_pct: float = 0.0
     day_high: float = 0.0
     day_low: float = 0.0
+    prev_close: float = 0.0
     state: str = 'closed'
     exchange: str = ''
     next_open: Optional[datetime] = None
@@ -108,6 +109,7 @@ class MarketAPI:
             data.next_open = self._resolve_next_open(metadata)
 
             prev_close = self._resolve_previous_close(ticker, metadata, data.state)
+            data.prev_close = prev_close
             data.change_pct = ((data.price - prev_close) / prev_close) * 100
 
             # Attempt to fetch high/low via fast_info, fallback to history dataframe

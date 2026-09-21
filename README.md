@@ -35,6 +35,7 @@ Launch TickerIcon from the Start Menu or by opening the installed application di
 Click the tray icon to jump to the next symbol immediately (in both display modes). Right-click it to open the context menu:
 
 * **Next Symbol** jumps to the next enabled symbol, same as clicking the icon.
+* **Refresh Now** fetches fresh market data immediately instead of waiting for the next scheduled update.
 * **Symbols** lists every configured symbol with a checkmark; toggle one to show or hide it. This only filters the display — data is still fetched for all configured symbols — and the last enabled symbol cannot be hidden.
 * **Settings** opens the configuration window.
 * **Pause** temporarily stops price updates and switches the tray icon to a paused state until you unpause it.
@@ -45,7 +46,7 @@ Click the tray icon to jump to the next symbol immediately (in both display mode
 
 The **Settings** window is organized into three sections:
 
-* **General** — scroll speed and display time (milliseconds, 100 ms steps), icon font size and strip width (pixels), and the continuous scroll toggle.
+* **General** — scroll speed and display time (milliseconds, 100 ms steps), icon font size and strip width (pixels), the continuous scroll toggle, what the continuous ticker shows per symbol (percentage, price, or both), and optional daily high (↑) / low (↓) values with their change percentages.
 * **Symbols** — the list of tracked ticker symbols (up to ten).
 * **Colors** — the static background and error-strip colors, plus a color scheme per market state (positive text, negative text, and strip color for Open, Premarket, After hours, and Closed). Click any swatch to open a color picker.
 

@@ -41,7 +41,7 @@ class TickerIcon:
         self.config = ConfigHandler(config_path).load()
         self.api = MarketAPI(self.config['tickers'])
         self.icon_gen = IconGenerator(self.config)
-        self.continuous_gen = ContinuousScrollGenerator(self.icon_gen)
+        self.continuous_gen = ContinuousScrollGenerator(self.icon_gen, self.config)
         self.display_thread = None
 
         # Latest fetched data per symbol, shared between the fetch and display
@@ -60,6 +60,9 @@ class TickerIcon:
 
         # Set when the enabled-symbol set changes so display loops re-read it.
         self.display_dirty = threading.Event()
+
+        # Set by the Refresh Now menu item to trigger an immediate data fetch.
+        self.refresh_requested = threading.Event()
 
         # Set once the first fetch completes, so the display loop doesn't
         # show stale/zeroed data before real data is available.
@@ -106,6 +109,7 @@ class TickerIcon:
         return pystray.Menu(
             # default=True makes a left click on the icon trigger this item
             pystray.MenuItem('Next Symbol', self.on_next_symbol, default=True),
+            pystray.MenuItem('Refresh Now', self.on_refresh),
             pystray.MenuItem('Symbols', pystray.Menu(self._symbol_menu_items)),
             pystray.MenuItem('Settings', self.on_settings),
             pystray.MenuItem('Pause', self.on_toggle_pause, checked=lambda item: self.paused.is_set()),
@@ -141,6 +145,17 @@ class TickerIcon:
         """
         if len(self._get_enabled_symbols()) > 1:
             self.skip_requested.set()
+
+    def on_refresh(self, icon, menu_item):
+        """
+        Callback for the Refresh Now menu option: wakes the fetch loop so
+        market data is refreshed immediately.
+
+        Args:
+            icon (pystray.Icon): The tray icon instance.
+            menu_item (pystray.MenuItem): The menu item that was clicked.
+        """
+        self.refresh_requested.set()
 
     def on_toggle_symbol(self, symbol: str):
         """
@@ -270,7 +285,7 @@ class TickerIcon:
             self.config = config
             self.api = MarketAPI(self.config['tickers'])
             self.icon_gen = IconGenerator(self.config)
-            self.continuous_gen = ContinuousScrollGenerator(self.icon_gen)
+            self.continuous_gen = ContinuousScrollGenerator(self.icon_gen, self.config)
             # Keep already-fetched data for retained tickers so a settings save
             # (e.g. toggling scroll mode) never shows zeroed placeholders.
             self.snapshot = {
@@ -426,6 +441,7 @@ class TickerIcon:
                 self._wait_while_paused()
                 continue
 
+            self.refresh_requested.clear()
             with self.lock:
                 api = self.api
                 config_version = self.config
@@ -459,15 +475,17 @@ class TickerIcon:
 
     def _sleep_between_fetches(self, seconds: float):
         """
-        Sleeps between fetches, waking early on shutdown, pause, or when a
-        config save cleared data_ready (new tickers need an immediate fetch).
+        Sleeps between fetches, waking early on shutdown, pause, a manual
+        refresh request, or when a config save cleared data_ready (new
+        tickers need an immediate fetch).
 
         Args:
             seconds (float): Maximum time to sleep for, in seconds.
         """
         end_time = time.monotonic() + seconds
         while (self.running and not self.paused.is_set()
-                and self.data_ready.is_set() and time.monotonic() < end_time):
+                and self.data_ready.is_set() and not self.refresh_requested.is_set()
+                and time.monotonic() < end_time):
             time.sleep(0.1)
 
     def _display_loop(self):

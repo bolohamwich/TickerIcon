@@ -181,17 +181,70 @@ class TestNextSegmentOffset:
 
 
 class TestFormatSegmentText:
-    def test_formats_positive_change_with_two_decimals(self):
+    def test_percentage_mode_is_the_default(self, generator):
         data = StockData(symbol="AMD", change_pct=5.14)
 
-        assert ContinuousScrollGenerator._format_segment_text("AMD", data) == "AMD +5.14%"
+        assert generator._format_segment_text("AMD", data) == "AMD +5.14%"
 
-    def test_formats_negative_change_with_two_decimals(self):
+    def test_formats_negative_change_with_two_decimals(self, generator):
         data = StockData(symbol="AAPL", change_pct=-2.04)
 
-        assert ContinuousScrollGenerator._format_segment_text("AAPL", data) == "AAPL -2.04%"
+        assert generator._format_segment_text("AAPL", data) == "AAPL -2.04%"
 
-    def test_keeps_two_decimals_for_double_digit_change(self):
+    def test_keeps_two_decimals_for_double_digit_change(self, generator):
         data = StockData(symbol="NVDA", change_pct=12.34)
 
-        assert ContinuousScrollGenerator._format_segment_text("NVDA", data) == "NVDA +12.34%"
+        assert generator._format_segment_text("NVDA", data) == "NVDA +12.34%"
+
+    def test_price_mode_shows_only_the_price(self, icon_gen):
+        generator = ContinuousScrollGenerator(icon_gen, {"ticker_value_mode": "price"})
+        data = StockData(symbol="AMD", price=123.456, change_pct=5.14)
+
+        assert generator._format_segment_text("AMD", data) == "AMD 123.46"
+
+    def test_both_mode_shows_price_then_percentage(self, icon_gen):
+        generator = ContinuousScrollGenerator(icon_gen, {"ticker_value_mode": "both"})
+        data = StockData(symbol="AMD", price=123.45, change_pct=5.14)
+
+        assert generator._format_segment_text("AMD", data) == "AMD 123.45 +5.14%"
+
+    def test_unknown_mode_falls_back_to_percentage(self, icon_gen):
+        generator = ContinuousScrollGenerator(icon_gen, {"ticker_value_mode": "candles"})
+        data = StockData(symbol="AMD", change_pct=5.14)
+
+        assert generator._format_segment_text("AMD", data) == "AMD +5.14%"
+
+    def test_daily_high_and_low_use_arrows(self, icon_gen):
+        generator = ContinuousScrollGenerator(
+            icon_gen, {"show_daily_high": True, "show_daily_low": True},
+        )
+        data = StockData(symbol="AMD", change_pct=5.14, day_high=125.0, day_low=119.5)
+
+        assert generator._format_segment_text("AMD", data) == "AMD +5.14% ↑125.00 ↓119.50"
+
+    def test_daily_high_and_low_are_independent_toggles(self, icon_gen):
+        generator = ContinuousScrollGenerator(icon_gen, {"show_daily_low": True})
+        data = StockData(symbol="AMD", change_pct=5.14, day_high=125.0, day_low=119.5)
+
+        assert generator._format_segment_text("AMD", data) == "AMD +5.14% ↓119.50"
+
+    def test_high_low_pct_appends_change_vs_previous_close(self, icon_gen):
+        generator = ContinuousScrollGenerator(
+            icon_gen,
+            {"show_daily_high": True, "show_daily_low": True, "high_low_pct": True},
+        )
+        data = StockData(
+            symbol="AMD", change_pct=5.14, day_high=110.0, day_low=95.0, prev_close=100.0,
+        )
+
+        assert generator._format_segment_text("AMD", data) == (
+            "AMD +5.14% ↑110.00 (+10.00%) ↓95.00 (-5.00%)"
+        )
+
+    def test_high_low_pct_skipped_without_a_previous_close(self, icon_gen):
+        generator = ContinuousScrollGenerator(
+            icon_gen, {"show_daily_high": True, "high_low_pct": True},
+        )
+        data = StockData(symbol="AMD", change_pct=5.14, day_high=110.0, prev_close=0.0)
+
+        assert generator._format_segment_text("AMD", data) == "AMD +5.14% ↑110.00"

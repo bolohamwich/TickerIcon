@@ -196,6 +196,7 @@ class TestFetchOne:
         assert data.has_error is False
         assert data.price == 123.45
         assert data.change_pct == pytest.approx(23.45)
+        assert data.prev_close == 100.0
         assert data.day_high == 130.0
         assert data.day_low == 95.0
         assert data.exchange == "Nasdaq"
